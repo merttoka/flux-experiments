@@ -1,5 +1,19 @@
 const API_BASE = '/api'
 
+const KEY_STORAGE = 'bfl_api_key'
+
+export function getApiKey(): string {
+  return localStorage.getItem(KEY_STORAGE) || ''
+}
+
+export function setApiKey(key: string) {
+  localStorage.setItem(KEY_STORAGE, key)
+}
+
+export function hasApiKey(): boolean {
+  return getApiKey().length > 0
+}
+
 export interface GenerationParams {
   prompt: string
   model: string
@@ -13,7 +27,7 @@ export interface GenerationParams {
 
 interface SubmitResponse {
   id: string
-  polling_url?: string
+  polling_url: string
 }
 
 interface PollResponse {
@@ -37,11 +51,17 @@ export const MODELS = [
 
 export type ModelValue = typeof MODELS[number]['value']
 
+function authHeaders(): Record<string, string> {
+  const key = getApiKey()
+  if (!key) throw new Error('No API key set. Add your BFL API key in settings.')
+  return { 'x-bfl-key': key }
+}
+
 async function submitGeneration(params: GenerationParams): Promise<SubmitResponse> {
   const { model, ...rest } = params
   const res = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ model, ...rest }),
   })
   if (!res.ok) {
@@ -51,10 +71,23 @@ async function submitGeneration(params: GenerationParams): Promise<SubmitRespons
   return res.json()
 }
 
-async function pollResult(id: string): Promise<PollResponse> {
-  const res = await fetch(`${API_BASE}/result?id=${encodeURIComponent(id)}`)
-  if (!res.ok) throw new Error(`Poll failed: ${res.status}`)
-  return res.json()
+async function pollResult(pollingUrl: string): Promise<PollResponse> {
+  const res = await fetch(`${API_BASE}/result?url=${encodeURIComponent(pollingUrl)}`, {
+    headers: authHeaders(),
+  })
+  const text = await res.text()
+  let data: PollResponse
+  try {
+    data = JSON.parse(text)
+  } catch {
+    console.error('Poll response not JSON:', res.status, text)
+    throw new Error(`Poll failed: ${res.status}`)
+  }
+  if (!res.ok) {
+    console.error('Poll error:', res.status, data)
+    throw new Error(`Poll failed: ${res.status}`)
+  }
+  return data
 }
 
 function sleep(ms: number) {
@@ -66,7 +99,7 @@ export async function generateImage(
   onStatus?: (status: string) => void
 ): Promise<string> {
   onStatus?.('Submitting...')
-  const { id } = await submitGeneration(params)
+  const { polling_url } = await submitGeneration(params)
 
   let delay = 1000
   const maxDelay = 5000
@@ -74,7 +107,7 @@ export async function generateImage(
   while (true) {
     await sleep(delay)
     onStatus?.('Generating...')
-    const result = await pollResult(id)
+    const result = await pollResult(polling_url)
 
     if (result.status === 'Ready' && result.result?.sample) {
       onStatus?.('Done')

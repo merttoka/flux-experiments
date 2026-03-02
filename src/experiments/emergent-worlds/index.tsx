@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import EmergentWorlds from './EmergentWorlds'
+import ApiKeyButton from '../../lib/ApiKeyButton'
 
 export default function EmergentWorldsPage() {
   return (
@@ -8,6 +9,7 @@ export default function EmergentWorldsPage() {
         <Link to="/">Lab</Link>
         <span className="separator">/</span>
         <span className="sim-title">Emergent Worlds</span>
+        <ApiKeyButton />
       </header>
       <EmergentWorlds />
     </div>

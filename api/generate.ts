@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-const BFL_API_KEY = process.env.BFL_API_KEY
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  if (!BFL_API_KEY) return res.status(500).json({ error: 'BFL_API_KEY not configured' })
+
+  const apiKey = req.headers['x-bfl-key'] as string
+  if (!apiKey) return res.status(401).json({ error: 'API key required. Set your BFL key in settings.' })
 
   const { model, ...params } = req.body
   if (!model) return res.status(400).json({ error: 'model required' })
@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-key': BFL_API_KEY,
+        'x-key': apiKey,
       },
       body: JSON.stringify(params),
     })
@@ -22,7 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await response.json()
     if (!response.ok) return res.status(response.status).json(data)
     return res.status(200).json(data)
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return res.status(500).json({ error: message })
   }
 }

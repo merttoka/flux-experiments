@@ -14,14 +14,12 @@ A WebGPU DLA (Diffusion-Limited Aggregation) simulation runs in real-time. Captu
 
 ```bash
 npm install
-cp .env.local.example .env.local  # add your BFL_API_KEY
-npm run dev                        # local dev
+npm run dev
 ```
 
-For Vercel serverless functions locally:
-```bash
-npx vercel dev
-```
+## API Key
+
+Users provide their own BFL API key via the in-app settings button. Keys are stored in `localStorage` and passed through the serverless proxy — never stored server-side. Get a key at [api.bfl.ai](https://api.bfl.ai).
 
 ## Deploy
 
@@ -29,7 +27,7 @@ npx vercel dev
 npx vercel --prod
 ```
 
-Set `BFL_API_KEY` in Vercel environment variables.
+No server-side environment variables needed.
 
 ## Stack
 - Vite + React + TypeScript
