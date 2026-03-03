@@ -1,4 +1,7 @@
 {
+  "redirects": [
+    { "source": "/bfl-api", "destination": "/bfl-api/" }
+  ],
   "rewrites": [
     { "source": "/bfl-api/api/(.*)", "destination": "/api/$1" },
     { "source": "/bfl-api/assets/(.*)", "destination": "/assets/$1" },
