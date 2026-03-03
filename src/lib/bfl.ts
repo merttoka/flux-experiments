@@ -1,4 +1,4 @@
-const API_BASE = '/api'
+const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
 
 const KEY_STORAGE = 'bfl_api_key'
 
@@ -8,6 +8,12 @@ export function getApiKey(): string {
 
 export function setApiKey(key: string) {
   localStorage.setItem(KEY_STORAGE, key)
+  window.dispatchEvent(new Event('bfl-key-change'))
+}
+
+export function clearApiKey() {
+  localStorage.removeItem(KEY_STORAGE)
+  window.dispatchEvent(new Event('bfl-key-change'))
 }
 
 export function hasApiKey(): boolean {
@@ -64,15 +70,17 @@ function authHeaders(): Record<string, string> {
   return { 'x-bfl-key': key }
 }
 
-async function submitGeneration(params: GenerationParams): Promise<SubmitResponse> {
+async function submitGeneration(params: GenerationParams, signal?: AbortSignal): Promise<SubmitResponse> {
   const { model, ...rest } = params
+  const timeout = AbortSignal.timeout(30_000)
+  const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
   let res: Response
   try {
     res = await fetch(`${API_BASE}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ model, ...rest }),
-      signal: AbortSignal.timeout(30_000),
+      signal: combinedSignal,
     })
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'TimeoutError') {
@@ -87,12 +95,14 @@ async function submitGeneration(params: GenerationParams): Promise<SubmitRespons
   return res.json()
 }
 
-async function pollResult(pollingUrl: string): Promise<PollResponse> {
+async function pollResult(pollingUrl: string, signal?: AbortSignal): Promise<PollResponse> {
+  const timeout = AbortSignal.timeout(15_000)
+  const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
   let res: Response
   try {
     res = await fetch(`${API_BASE}/result?url=${encodeURIComponent(pollingUrl)}`, {
       headers: authHeaders(),
-      signal: AbortSignal.timeout(15_000),
+      signal: combinedSignal,
     })
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'TimeoutError') {
@@ -103,6 +113,12 @@ async function pollResult(pollingUrl: string): Promise<PollResponse> {
   if (res.status === 404 || res.status === 410) {
     throw new Error('Polling URL expired')
   }
+  if (res.status === 429) {
+    const body = await res.json().catch(() => ({})) as { retryAfter?: number }
+    const wait = body.retryAfter ?? 5
+    await sleep(wait * 1000)
+    return pollResult(pollingUrl, signal)
+  }
   let data: PollResponse
   try {
     data = await res.json() as PollResponse
@@ -110,8 +126,7 @@ async function pollResult(pollingUrl: string): Promise<PollResponse> {
     throw new Error(`Poll failed: ${res.status} (non-JSON response)`)
   }
   if (!res.ok) {
-    console.error('Poll error:', res.status, data)
-    throw new Error(`Poll failed: ${res.status}`)
+    throw new Error(`Poll failed: ${res.status} ${(data as { error?: string }).error ?? JSON.stringify(data)}`)
   }
   return data
 }
@@ -122,10 +137,11 @@ function sleep(ms: number) {
 
 export async function generateImage(
   params: GenerationParams,
-  onStatus?: (status: string) => void
+  onStatus?: (status: string) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   onStatus?.('Submitting...')
-  const { polling_url } = await submitGeneration(params)
+  const { polling_url } = await submitGeneration(params, signal)
 
   let delay = 1000
   const maxDelay = 5000
@@ -135,12 +151,17 @@ export async function generateImage(
   while (true) {
     await sleep(delay)
 
+    if (signal?.aborted) {
+      throw new Error('Generation aborted')
+    }
+
     if (Date.now() - startTime > maxPollDuration) {
       throw new Error('Generation timed out')
     }
 
-    onStatus?.('Generating...')
-    const result = await pollResult(polling_url)
+    const elapsed = Math.round((Date.now() - startTime) / 1000)
+    onStatus?.(`Generating... ${elapsed}s`)
+    const result = await pollResult(polling_url, signal)
 
     if (result.status === 'Ready' && result.result?.sample) {
       onStatus?.('Done')

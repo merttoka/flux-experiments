@@ -28,9 +28,10 @@ Users provide their own BFL API key via the in-app settings button. Keys are sto
 
 ## Deploy
 
-```bash
-npx vercel --prod
-```
+Deployed on Vercel. Served under `lab.merttoka.com/bfl-api/` via rewrite from the lab project.
+
+- `base: '/bfl-api/'` is set in `vite.config.ts` when `VERCEL` env is present
+- `vercel.json` rewrites `/bfl-api/api/*` to serverless functions and `/bfl-api/*` to the SPA
 
 No server-side environment variables needed.
 

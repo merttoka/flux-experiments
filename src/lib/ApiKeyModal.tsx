@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getApiKey, setApiKey } from './bfl'
+import { getApiKey, setApiKey, clearApiKey } from './bfl'
 
 interface Props {
   open: boolean
@@ -45,6 +45,13 @@ export default function ApiKeyModal({ open, onClose }: Props) {
           autoFocus
         />
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+          {getApiKey() && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => { clearApiKey(); setKey(''); onClose() }}
+              style={{ color: '#f87171', marginRight: 'auto' }}
+            >Delete Key</button>
+          )}
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={!key.trim()}>Save</button>
         </div>

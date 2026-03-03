@@ -1,8 +1,50 @@
 import { useState, useRef, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { generateImage, canvasToBase64, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
+import { generateImage, hasApiKey, canvasToBase64, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
 import { init, type SimHandle, type SimConfig } from '../../sim/dla-advanced/simulation'
-import { getStageForDelta } from './prompts'
+import { DEFAULT_PROMPT } from './prompts'
+
+const STORAGE_KEY = 'ew-settings'
+
+interface PersistedSettings {
+  model: ModelValue
+  seedCount: number
+  speed: number
+  autoCapture: boolean
+  captureInterval: number
+  dofExponent: number
+  dofFocus: number
+  dofRadius: number
+  dofIterations: number
+  stoppedR: number
+  stoppedG: number
+  stoppedB: number
+  fadeRate: number
+  sizeMode: 'default' | 'custom'
+  width: number
+  height: number
+  aspectRatio: string
+  steps: number
+  guidance: number
+  outputFormat: 'jpeg' | 'png'
+  safetyTolerance: number
+  promptUpsampling: boolean
+  raw: boolean
+  imagePromptStrength: number
+}
+
+function loadSettings(): Partial<PersistedSettings> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) as Partial<PersistedSettings> : {}
+  } catch { return {} }
+}
+
+function saveSettings(s: PersistedSettings) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch { /* quota */ }
+}
+
+const saved = loadSettings()
 
 function Tip({ text }: { text: string }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
@@ -71,7 +113,6 @@ const MODEL_COLUMNS = ['Pro', 'Max', 'Flex', 'Klein', '1.1 Pro', '1.1 Ultra']
 interface CapturedFrame {
   dataUrl: string
   frame: number
-  stage: string
   timestamp: number
   fps: number
   speed: number
@@ -83,7 +124,6 @@ interface CapturedFrame {
 interface GalleryEntry {
   imageUrl: string
   prompt: string
-  stage: string
   timestamp: number
   simFrame: number
 }
@@ -93,9 +133,8 @@ export default function EmergentWorlds() {
   const simRef = useRef<SimHandle | null>(null)
   const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const [model, setModel] = useState<ModelValue>('flux-2-pro')
-  const [prompt, setPrompt] = useState('')
-  const [currentStage, setCurrentStage] = useState('Nucleation')
+  const [model, setModel] = useState<ModelValue>(saved.model ?? 'flux-2-pro')
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
   const [frameCount, setFrameCount] = useState(0)
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState('')
@@ -103,55 +142,72 @@ export default function EmergentWorlds() {
   const [gallery, setGallery] = useState<GalleryEntry[]>([])
   const [lightbox, setLightbox] = useState<{ source: 'capture' | 'gallery'; index: number } | null>(null)
   const [simReady, setSimReady] = useState(false)
+  const [hasKey, setHasKey] = useState(hasApiKey())
+
+  useEffect(() => {
+    const onKeyChange = () => setHasKey(hasApiKey())
+    window.addEventListener('bfl-key-change', onKeyChange)
+    return () => window.removeEventListener('bfl-key-change', onKeyChange)
+  }, [])
   const [simError, setSimError] = useState<string | null>(null)
   const [simStats, setSimStats] = useState({ resolution: 0, agentCount: 0 })
   const [fps, setFps] = useState(0)
   const lastFrameRef = useRef(0)
 
-  // Pixel-delta refs
-  const offscreenRef = useRef<OffscreenCanvas | null>(null)
-  const offCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null)
-  const prevPixelDataRef = useRef<Uint8ClampedArray | null>(null)
-  const deltaWindowRef = useRef<number[]>([])
-  const [smoothedDelta, setSmoothedDelta] = useState(1.0)
-
   // Visual controls
   const [visualOpen, setVisualOpen] = useState(false)
-  const [dofExponent, setDofExponent] = useState(0.9)
-  const [dofFocus, setDofFocus] = useState(1.4)
-  const [dofRadius, setDofRadius] = useState(0.8)
-  const [dofIterations, setDofIterations] = useState(30)
-  const [stoppedR, setStoppedR] = useState(0.01)
-  const [stoppedG, setStoppedG] = useState(0.8)
-  const [stoppedB, setStoppedB] = useState(1.3)
-  const [fadeRate, setFadeRate] = useState(0.20)
+  const [dofExponent, setDofExponent] = useState(saved.dofExponent ?? 0.9)
+  const [dofFocus, setDofFocus] = useState(saved.dofFocus ?? 1.4)
+  const [dofRadius, setDofRadius] = useState(saved.dofRadius ?? 0.8)
+  const [dofIterations, setDofIterations] = useState(saved.dofIterations ?? 30)
+  const [stoppedR, setStoppedR] = useState(saved.stoppedR ?? 0.01)
+  const [stoppedG, setStoppedG] = useState(saved.stoppedG ?? 0.8)
+  const [stoppedB, setStoppedB] = useState(saved.stoppedB ?? 1.3)
+  const [fadeRate, setFadeRate] = useState(saved.fadeRate ?? 0.20)
 
   // Sim params
-  const [seedCount, setSeedCount] = useState(1)
-  const [speed, setSpeed] = useState(1)
+  const [seedCount, setSeedCount] = useState(saved.seedCount ?? 1)
+  const [speed, setSpeed] = useState(saved.speed ?? 1)
 
   // Frame capture
   const [capturedFrames, setCapturedFrames] = useState<CapturedFrame[]>([])
-  const [captureInterval, setCaptureInterval] = useState(1000)
-  const [autoCapture, setAutoCapture] = useState(false)
+  const [captureInterval, setCaptureInterval] = useState(saved.captureInterval ?? 1000)
+  const [autoCapture, setAutoCapture] = useState(saved.autoCapture ?? false)
   const [paused, setPaused] = useState(false)
   const lastCaptureFrameRef = useRef(0)
 
   // Advanced settings
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [sizeMode, setSizeMode] = useState<'default' | 'custom'>('default')
-  const [width, setWidth] = useState(1024)
-  const [height, setHeight] = useState(768)
-  const [aspectRatio, setAspectRatio] = useState('16:9')
-  const [steps, setSteps] = useState(50)
-  const [guidance, setGuidance] = useState(5)
+  const [sizeMode, setSizeMode] = useState<'default' | 'custom'>(saved.sizeMode ?? 'default')
+  const [width, setWidth] = useState(saved.width ?? 1024)
+  const [height, setHeight] = useState(saved.height ?? 768)
+  const [aspectRatio, setAspectRatio] = useState(saved.aspectRatio ?? '16:9')
+  const [steps, setSteps] = useState(saved.steps ?? 50)
+  const [guidance, setGuidance] = useState(saved.guidance ?? 5)
   const [seed, setSeed] = useState<number | null>(null)
-  const [outputFormat, setOutputFormat] = useState<'jpeg' | 'png'>('jpeg')
-  const [safetyTolerance, setSafetyTolerance] = useState(2)
-  const [promptUpsampling, setPromptUpsampling] = useState(true)
-  const [raw, setRaw] = useState(false)
-  const [imagePromptStrength, setImagePromptStrength] = useState(0.1)
+  const [outputFormat, setOutputFormat] = useState<'jpeg' | 'png'>(saved.outputFormat ?? 'jpeg')
+  const [safetyTolerance, setSafetyTolerance] = useState(saved.safetyTolerance ?? 2)
+  const [promptUpsampling, setPromptUpsampling] = useState(saved.promptUpsampling ?? true)
+  const [raw, setRaw] = useState(saved.raw ?? false)
+  const [imagePromptStrength, setImagePromptStrength] = useState(saved.imagePromptStrength ?? 0.1)
   const [helpHover, setHelpHover] = useState(false)
+
+  // Persist settings to localStorage
+  useEffect(() => {
+    saveSettings({
+      model, seedCount, speed, autoCapture, captureInterval,
+      dofExponent, dofFocus, dofRadius, dofIterations,
+      stoppedR, stoppedG, stoppedB, fadeRate,
+      sizeMode, width, height, aspectRatio, steps, guidance,
+      outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength,
+    })
+  }, [
+    model, seedCount, speed, autoCapture, captureInterval,
+    dofExponent, dofFocus, dofRadius, dofIterations,
+    stoppedR, stoppedG, stoppedB, fadeRate,
+    sizeMode, width, height, aspectRatio, steps, guidance,
+    outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength,
+  ])
 
   // Reset/clamp values when model changes
   useEffect(() => {
@@ -172,11 +228,9 @@ export default function EmergentWorlds() {
     const canvas = simRef.current.canvas
     const dataUrl = canvas.toDataURL('image/png')
     const frame = simRef.current.getFrame()
-    const stage = getStageForDelta(smoothedDelta)
     setCapturedFrames(prev => [...prev, {
       dataUrl,
       frame,
-      stage: stage.label,
       timestamp: Date.now(),
       fps,
       speed,
@@ -184,7 +238,7 @@ export default function EmergentWorlds() {
       resolution: simStats.resolution,
       agentCount: simStats.agentCount,
     }])
-  }, [fps, speed, seedCount, simStats, smoothedDelta])
+  }, [fps, speed, seedCount, simStats])
 
   const startSim = useCallback(async (config?: Partial<SimConfig>) => {
     if (!canvasRef.current) return
@@ -194,13 +248,9 @@ export default function EmergentWorlds() {
     }
     setSimReady(false)
     setFrameCount(0)
-    setCurrentStage('Nucleation')
-    setPrompt('')
-    setSmoothedDelta(1.0)
+    setCapturedFrames([])
     lastFrameRef.current = 0
     lastCaptureFrameRef.current = 0
-    prevPixelDataRef.current = null
-    deltaWindowRef.current = []
 
     try {
       const handle = await init(canvasRef.current, {
@@ -209,6 +259,8 @@ export default function EmergentWorlds() {
         speed: config?.speed ?? speed,
       })
       simRef.current = handle
+      handle.setDofParams(dofExponent, dofFocus, dofRadius, dofIterations)
+      handle.setColorParams(stoppedR, stoppedG, stoppedB, fadeRate)
       setSimStats({ resolution: handle.resolution, agentCount: handle.agentCount })
       setSimReady(true)
     } catch (err: unknown) {
@@ -226,16 +278,9 @@ export default function EmergentWorlds() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Update frame counter + pixel-delta stage detection + auto-capture
+  // Update frame counter + auto-capture
   useEffect(() => {
     if (!simReady) return
-
-    // Lazily create 64x64 offscreen canvas for pixel-delta sampling
-    if (!offscreenRef.current) {
-      offscreenRef.current = new OffscreenCanvas(64, 64)
-      offCtxRef.current = offscreenRef.current.getContext('2d')
-    }
-
     const interval = setInterval(() => {
       if (!simRef.current) return
       const frame = simRef.current.getFrame()
@@ -243,56 +288,14 @@ export default function EmergentWorlds() {
       lastFrameRef.current = frame
       setFrameCount(frame)
 
-      // Pixel-delta computation
-      const offCtx = offCtxRef.current
-      const simCanvas = simRef.current.canvas
-      let delta = smoothedDelta
-      if (offCtx) {
-        offCtx.drawImage(simCanvas, 0, 0, 64, 64)
-        const imageData = offCtx.getImageData(0, 0, 64, 64)
-        const pixels = imageData.data
-        const prev = prevPixelDataRef.current
-        if (prev) {
-          let sum = 0
-          for (let i = 0; i < pixels.length; i += 4) {
-            sum += Math.abs(pixels[i] - prev[i])       // R
-            sum += Math.abs(pixels[i + 1] - prev[i + 1]) // G
-            sum += Math.abs(pixels[i + 2] - prev[i + 2]) // B
-          }
-          const pixelCount = 64 * 64
-          const rawDelta = sum / (pixelCount * 3 * 255) // normalize 0–1
-          const win = deltaWindowRef.current
-          win.push(rawDelta)
-          if (win.length > 5) win.shift()
-          // Need at least 3 samples before trusting the smoothed value
-          if (win.length >= 3) {
-            delta = win.reduce((a, b) => a + b, 0) / win.length
-            setSmoothedDelta(delta)
-          }
-        }
-        prevPixelDataRef.current = new Uint8ClampedArray(pixels)
-      }
-
-      const stage = getStageForDelta(delta)
-      setCurrentStage(stage.label)
-      setPrompt((prev) => {
-        // Auto-update prompt when stage changes, unless user manually edited
-        const prevStage = getStageForDelta(delta + 0.01) // slight offset to detect transition
-        if (prev === prevStage.prompt || prev === '') {
-          return stage.prompt
-        }
-        return prev
-      })
-
-      // Auto-capture frames (stop at Mature)
-      if (autoCapture && captureInterval > 0 && stage.label !== 'Mature Ecosystem' && frame - lastCaptureFrameRef.current >= captureInterval) {
+      // Auto-capture
+      if (autoCapture && captureInterval > 0 && frame - lastCaptureFrameRef.current >= captureInterval) {
         lastCaptureFrameRef.current = frame
         const canvas = simRef.current!.canvas
         const dataUrl = canvas.toDataURL('image/png')
         setCapturedFrames(prev => [...prev, {
           dataUrl,
           frame,
-          stage: stage.label,
           timestamp: Date.now(),
           fps: frame - (lastFrameRef.current - (frame - lastFrameRef.current)),
           speed,
@@ -303,7 +306,7 @@ export default function EmergentWorlds() {
       }
     }, 1000)
     return () => clearInterval(interval)
-  }, [simReady, captureInterval, autoCapture, speed, seedCount, smoothedDelta])
+  }, [simReady, captureInterval, autoCapture, speed, seedCount])
 
   const doGenerate = useCallback(async () => {
     if (!simRef.current || generating) return
@@ -313,8 +316,7 @@ export default function EmergentWorlds() {
     try {
       const base64 = canvasToBase64(simRef.current.canvas)
       const frame = simRef.current.getFrame()
-      const stage = getStageForDelta(smoothedDelta)
-      const currentPrompt = prompt || stage.prompt
+      const currentPrompt = prompt
 
       const params: GenerationParams = {
         prompt: currentPrompt,
@@ -352,7 +354,6 @@ export default function EmergentWorlds() {
       setGallery((prev) => [{
         imageUrl,
         prompt: currentPrompt,
-        stage: stage.label,
         timestamp: Date.now(),
         simFrame: frame,
       }, ...prev])
@@ -361,7 +362,7 @@ export default function EmergentWorlds() {
     } finally {
       setGenerating(false)
     }
-  }, [model, prompt, generating, sizeMode, width, height, aspectRatio, steps, guidance, seed, outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength, smoothedDelta])
+  }, [model, prompt, generating, sizeMode, width, height, aspectRatio, steps, guidance, seed, outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength])
 
   // Auto-generate toggle
   useEffect(() => {
@@ -600,7 +601,7 @@ export default function EmergentWorlds() {
               <p style={{ fontSize: '0.75rem' }}>{simError}</p>
             </div>
           ) : (
-            <>
+            <div style={{ display: 'inline-flex', flexDirection: 'column', maxWidth: '100%' }}>
               <canvas
                 ref={canvasRef}
                 style={{
@@ -620,17 +621,13 @@ export default function EmergentWorlds() {
                 {paused && <><span style={{ color: '#f59e0b' }}>PAUSED</span><span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span></>}
                 {simStats.resolution}x{simStats.resolution}
                 <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
-                {simStats.agentCount.toLocaleString()} agents
+                f.{frameCount}
                 <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
                 {fps}fps
                 <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
-                f.{frameCount}
-                <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
-                &delta;{smoothedDelta.toFixed(3)}
-                <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
-                <span style={{ color: 'var(--accent)' }}>{currentStage}</span>
+                {simStats.agentCount.toLocaleString()} agents
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -759,8 +756,6 @@ export default function EmergentWorlds() {
                     lineHeight: 1.2,
                   }}>
                     f.{cf.frame}
-                    <br />
-                    {cf.stage}
                   </div>
                 </div>
               ))}
@@ -1046,7 +1041,7 @@ export default function EmergentWorlds() {
 
         {/* Prompt */}
         <div className="control-group">
-          <label className="control-label">Prompt (auto-updates with stage)</label>
+          <label className="control-label">Prompt</label>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -1056,20 +1051,40 @@ export default function EmergentWorlds() {
 
         {/* Generate controls */}
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <button
-            className="btn btn-primary"
-            onClick={doGenerate}
-            disabled={generating || !simReady}
-          >
-            {generating ? <><span className="spinner" /> {status}</> : 'Generate Now'}
-          </button>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              className="btn btn-primary"
+              onClick={doGenerate}
+              disabled={generating || !simReady || !hasKey}
+            >
+              {generating ? <><span className="spinner" /> {status}</> : 'Generate Now'}
+            </button>
+            {!hasKey && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginBottom: 6,
+                background: '#222',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.3rem 0.6rem',
+                fontSize: '0.7rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-secondary)',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+              }}>BFL API key required</div>
+            )}
+          </div>
 
           <label className="checkbox-label">
             <input
               type="checkbox"
               checked={autoGenerate}
               onChange={(e) => setAutoGenerate(e.target.checked)}
-              disabled={!simReady}
+              disabled={!simReady || !hasKey}
             />
             Auto-generate (30s)
           </label>
@@ -1098,9 +1113,9 @@ export default function EmergentWorlds() {
                   className="gallery-item"
                   onClick={() => setLightbox({ source: 'gallery', index: i })}
                 >
-                  <img src={entry.imageUrl} alt={entry.stage} />
+                  <img src={entry.imageUrl} alt={`f${entry.simFrame}`} />
                   <div className="gallery-label">
-                    {entry.stage} &middot; f{entry.simFrame}
+                    f{entry.simFrame}
                   </div>
                 </div>
               ))}
@@ -1119,8 +1134,8 @@ export default function EmergentWorlds() {
           ? (item as CapturedFrame).dataUrl
           : (item as GalleryEntry).imageUrl
         const label = lightbox.source === 'capture'
-          ? `f.${(item as CapturedFrame).frame} — ${(item as CapturedFrame).stage}`
-          : `${(item as GalleryEntry).stage} — f${(item as GalleryEntry).simFrame}`
+          ? `f.${(item as CapturedFrame).frame}`
+          : `f${(item as GalleryEntry).simFrame}`
         const canPrev = idx > 0
         const canNext = idx < items.length - 1
         return (

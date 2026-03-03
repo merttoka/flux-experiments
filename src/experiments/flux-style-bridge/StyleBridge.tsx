@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type DragEvent, type ChangeEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { generateImage, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
+import { generateImage, hasApiKey, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
 import { presets, blendPrompts } from './presets'
 import CompareSlider from './CompareSlider'
 import { loadGallery, saveEntry, deleteEntry, estimateStorageBytes, urlToDataUrl, type StoredGalleryEntry } from '../../lib/galleryDB'
@@ -21,7 +21,7 @@ function Tip({ text }: { text: string }) {
       {pos && createPortal(
         <div style={{
           position: 'fixed',
-          left: pos.x,
+          left: Math.min(pos.x, window.innerWidth - 236),
           top: pos.y - 6,
           transform: 'translate(-50%, -100%)',
           background: '#222',
@@ -126,19 +126,6 @@ function OnlyBadge({ only }: { only: string | null }) {
   )
 }
 
-// Shared small button style for "+" and "x" toggle buttons
-const toggleBtnStyle = {
-  background: 'none',
-  border: '1px solid var(--border)',
-  borderRadius: 4,
-  color: 'var(--text-muted)',
-  fontSize: '0.75rem',
-  fontFamily: 'var(--font-mono)',
-  padding: '2px 8px',
-  cursor: 'pointer',
-  transition: 'border-color 0.2s, color 0.2s',
-  lineHeight: 1.4,
-}
 
 function buildModelParams(
   capturedPrompt: string,
@@ -252,6 +239,13 @@ export default function StyleBridge() {
   const [generating, setGenerating] = useState(false)
   const [dragover, setDragover] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [hasKey, setHasKey] = useState(hasApiKey())
+
+  useEffect(() => {
+    const onKeyChange = () => setHasKey(hasApiKey())
+    window.addEventListener('bfl-key-change', onKeyChange)
+    return () => window.removeEventListener('bfl-key-change', onKeyChange)
+  }, [])
 
   // Style DNA Mixer state
   const [mixerEnabled, setMixerEnabled] = useState(false)
@@ -355,7 +349,7 @@ export default function StyleBridge() {
   // Load gallery from IndexedDB on mount
   useEffect(() => {
     loadGallery().then(entries => {
-      setGallery(entries as GalleryEntry[])
+      setGallery(entries as unknown as GalleryEntry[])
       setGalleryLoaded(true)
     })
     refreshStorageSize()
@@ -375,7 +369,7 @@ export default function StyleBridge() {
       // keep original URLs if conversion fails
     }
     setGallery(prev => [stored, ...prev])
-    await saveEntry(stored as StoredGalleryEntry)
+    await saveEntry(stored as unknown as StoredGalleryEntry)
     refreshStorageSize()
   }, [refreshStorageSize])
 
@@ -506,14 +500,6 @@ export default function StyleBridge() {
     fontSize: '0.85rem',
   }
 
-  const groupLabelStyle = {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.65rem',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.08em',
-    color: 'var(--text-muted)',
-    marginBottom: '0.5rem',
-  }
 
   const sliderLabelStyle = {
     fontSize: '0.75rem',
@@ -621,15 +607,13 @@ export default function StyleBridge() {
           )}
           {!mixerEnabled ? (
             <button
-              style={toggleBtnStyle}
+              className="btn-icon"
               onClick={() => setMixerEnabled(true)}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
               title="Enable Style DNA Mixer"
             >+</button>
           ) : (
             <button
-              style={{ ...toggleBtnStyle, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+              className="btn-icon active"
               onClick={() => setMixerEnabled(false)}
               title="Disable mixer"
             >×</button>
@@ -643,7 +627,7 @@ export default function StyleBridge() {
         {mixerEnabled ? (
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span className="label-mono">
                 {presets[selectedPreset].name} (A)
               </span>
               <textarea
@@ -653,7 +637,7 @@ export default function StyleBridge() {
               />
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span className="label-mono">
                 {presets[secondPreset].name} (B)
               </span>
               <textarea
@@ -794,15 +778,13 @@ export default function StyleBridge() {
           )}
           {!compareEnabled ? (
             <button
-              style={toggleBtnStyle}
+              className="btn-icon"
               onClick={() => setCompareEnabled(true)}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
               title="Enable A/B Model Compare"
             >+</button>
           ) : (
             <button
-              style={{ ...toggleBtnStyle, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+              className="btn-icon active"
               onClick={() => setCompareEnabled(false)}
               title="Disable compare"
             >×</button>
@@ -810,27 +792,10 @@ export default function StyleBridge() {
         </div>
 
         {advancedOpen && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            width: 300,
-            marginTop: 6,
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '0.75rem',
-            zIndex: 40,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            maxHeight: 'calc(100vh - 200px)',
-            overflowY: 'auto' as const,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-          }}>
+          <div className="advanced-panel">
             {/* Group 1: Size */}
             <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
-              <div style={groupLabelStyle}>Size</div>
+              <div className="label-group">Size</div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <select value={sizeMode} onChange={(e) => setSizeMode(e.target.value as 'default' | 'custom')}>
@@ -882,7 +847,7 @@ export default function StyleBridge() {
 
             {/* Group 2: Generation */}
             <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
-              <div style={groupLabelStyle}>Generation</div>
+              <div className="label-group">Generation</div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {capGuidance.show && (
@@ -909,20 +874,7 @@ export default function StyleBridge() {
                     <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Seed<Tip text="Fixed seed for reproducible results. Leave empty for a random seed each generation." /></span>
                     <button
                       onClick={() => setSeed(Math.floor(Math.random() * 2147483647))}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-                      style={{
-                        background: 'none',
-                        border: '1px solid var(--border)',
-                        borderRadius: 4,
-                        color: 'var(--text-muted)',
-                        fontSize: '0.65rem',
-                        fontFamily: 'var(--font-mono)',
-                        padding: '1px 6px',
-                        cursor: 'pointer',
-                        textTransform: 'uppercase',
-                        transition: 'border-color 0.2s, color 0.2s',
-                      }}
+                      className="btn-tag"
                     >
                       Random
                     </button>
@@ -959,7 +911,7 @@ export default function StyleBridge() {
 
             {/* Group 3: Output */}
             <div>
-              <div style={groupLabelStyle}>Output</div>
+              <div className="label-group">Output</div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div>
@@ -1027,9 +979,29 @@ export default function StyleBridge() {
       </div>
 
       {/* Generate */}
-      <button className="btn btn-primary" onClick={generate} disabled={generating || !prompt.trim()}>
-        {generating ? <><span className="spinner" /> {status}</> : compareEnabled ? 'Generate A/B' : 'Generate'}
-      </button>
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button className="btn btn-primary" onClick={generate} disabled={generating || !prompt.trim() || !hasKey}>
+          {generating ? <><span className="spinner" /> {status}</> : compareEnabled ? 'Generate A/B' : 'Generate'}
+        </button>
+        {!hasKey && (
+          <div style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: 6,
+            background: '#222',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.3rem 0.6rem',
+            fontSize: '0.7rem',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-secondary)',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          }}>BFL API key required</div>
+        )}
+      </div>
 
       {/* Status (non-generating) */}
       {!generating && status && status !== 'Done' && (
@@ -1050,17 +1022,7 @@ export default function StyleBridge() {
                 <button
                   key={v}
                   onClick={() => setGalleryView(v)}
-                  style={{
-                    background: galleryView === v ? 'var(--border)' : 'none',
-                    border: '1px solid var(--border)',
-                    borderRadius: 4,
-                    color: galleryView === v ? 'var(--text-primary)' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '0.65rem',
-                    fontFamily: 'var(--font-mono)',
-                    padding: '2px 6px',
-                    transition: 'all 0.15s',
-                  }}
+                  className={`btn-tag${galleryView === v ? ' active' : ''}`}
                 >{v === 'list' ? '☰' : '⊞'}</button>
               ))}
             </div>
@@ -1073,15 +1035,7 @@ export default function StyleBridge() {
                 <div
                   key={entry.timestamp}
                   onClick={() => setLightboxIndex(i)}
-                  style={{
-                    cursor: 'pointer',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius)',
-                    padding: '0.75rem',
-                    transition: 'border-color 0.15s',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
-                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
+                  className="gallery-entry"
                 >
                   {entry.isCompare && entry.resultUrl2 ? (
                     <div>

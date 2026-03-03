@@ -1,5 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+// Keep in sync with src/lib/bfl.ts MODELS array
+const ALLOWED_MODELS: ReadonlySet<string> = new Set([
+  'flux-2-pro', 'flux-2-max', 'flux-2-flex',
+  'flux-2-klein-9b', 'flux-2-klein-4b',
+  'flux-pro-1.1', 'flux-pro-1.1-ultra',
+])
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -8,6 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { model, ...params } = req.body
   if (!model) return res.status(400).json({ error: 'model required' })
+  if (!ALLOWED_MODELS.has(model)) return res.status(400).json({ error: 'Invalid model' })
 
   try {
     const response = await fetch(`https://api.bfl.ai/v1/${model}`, {

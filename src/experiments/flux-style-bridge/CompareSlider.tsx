@@ -129,22 +129,24 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
         top: '50%',
         left: `${position}%`,
         transform: 'translate(-50%, -50%)',
-        width: 32,
-        height: 32,
+        width: 'min(32px, 10%)',
+        height: 'min(32px, 10%)',
+        minWidth: 20,
+        minHeight: 20,
         borderRadius: '50%',
         background: '#fff',
         border: '2px solid rgba(0,0,0,0.3)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '0.75rem',
-        color: '#333',
         pointerEvents: 'none',
         boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         opacity: hovering || dragging.current ? 1 : 0.5,
         transition: 'opacity 0.15s',
       }}>
-        ↔
+        <svg width="60%" height="60%" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 8H12M4 8L6 6M4 8L6 10M12 8L10 6M12 8L10 10" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
       </div>
 
       {/* Labels */}

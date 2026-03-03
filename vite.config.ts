@@ -62,5 +62,6 @@ function bflProxy(): Plugin {
 }
 
 export default defineConfig({
+  base: process.env.VERCEL ? '/bfl-api/' : '/',
   plugins: [react(), bflProxy()],
 })

@@ -10,13 +10,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' })
 
   try {
+    const parsed = new URL(url)
+    if (!parsed.hostname.endsWith('.bfl.ai')) {
+      return res.status(400).json({ error: 'Invalid URL: must be a .bfl.ai domain' })
+    }
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' })
+  }
+
+  try {
     const response = await fetch(url, {
       headers: { 'x-key': apiKey },
       signal: AbortSignal.timeout(15_000),
     })
 
     if (response.status === 429) {
-      const retryAfter = parseInt(response.headers.get('retry-after') ?? '5', 10) || 5
+      const retryAfter = Number(response.headers.get('retry-after') ?? '5') || 5
       return res.status(429).json({ error: 'Rate limited', retryAfter })
     }
 

@@ -10,6 +10,12 @@ export default function ApiKeyButton() {
     if (!open) setHasKey(hasApiKey())
   }, [open])
 
+  useEffect(() => {
+    const onKeyChange = () => setHasKey(hasApiKey())
+    window.addEventListener('bfl-key-change', onKeyChange)
+    return () => window.removeEventListener('bfl-key-change', onKeyChange)
+  }, [])
+
   return (
     <>
       <button
