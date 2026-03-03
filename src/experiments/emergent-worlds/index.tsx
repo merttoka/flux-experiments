@@ -8,7 +8,7 @@ export default function EmergentWorldsPage() {
       <header className="sim-header">
         <Link to="/">Lab</Link>
         <span className="separator">/</span>
-        <span className="sim-title">Emergent Worlds</span>
+        <span className="sim-title">FLUX Reimagined Ecosystems</span>
         <ApiKeyButton />
       </header>
       <EmergentWorlds />

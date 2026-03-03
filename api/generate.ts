@@ -17,13 +17,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'x-key': apiKey,
       },
       body: JSON.stringify(params),
+      signal: AbortSignal.timeout(30_000),
     })
+
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get('retry-after')) || 5
+      return res.status(429).json({ error: 'Rate limited', retryAfter })
+    }
 
     const data = await response.json()
     if (!response.ok) return res.status(response.status).json(data)
     return res.status(200).json(data)
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      return res.status(504).json({ error: 'Upstream timeout' })
+    }
+    const message = err instanceof Error ? err.message : String(err)
     return res.status(500).json({ error: message })
   }
 }

@@ -23,6 +23,13 @@ export interface GenerationParams {
   height?: number
   steps?: number
   guidance?: number
+  seed?: number
+  safety_tolerance?: number
+  output_format?: 'jpeg' | 'png'
+  prompt_upsampling?: boolean
+  aspect_ratio?: string
+  raw?: boolean
+  image_prompt_strength?: number
 }
 
 interface SubmitResponse {
@@ -59,11 +66,20 @@ function authHeaders(): Record<string, string> {
 
 async function submitGeneration(params: GenerationParams): Promise<SubmitResponse> {
   const { model, ...rest } = params
-  const res = await fetch(`${API_BASE}/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ model, ...rest }),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ model, ...rest }),
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error('Submit request timed out after 30s')
+    }
+    throw new Error(`Submit failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Generation failed: ${res.status} ${text}`)
@@ -72,16 +88,26 @@ async function submitGeneration(params: GenerationParams): Promise<SubmitRespons
 }
 
 async function pollResult(pollingUrl: string): Promise<PollResponse> {
-  const res = await fetch(`${API_BASE}/result?url=${encodeURIComponent(pollingUrl)}`, {
-    headers: authHeaders(),
-  })
-  const text = await res.text()
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}/result?url=${encodeURIComponent(pollingUrl)}`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error('Poll request timed out after 15s')
+    }
+    throw new Error(`Poll failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (res.status === 404 || res.status === 410) {
+    throw new Error('Polling URL expired')
+  }
   let data: PollResponse
   try {
-    data = JSON.parse(text)
+    data = await res.json() as PollResponse
   } catch {
-    console.error('Poll response not JSON:', res.status, text)
-    throw new Error(`Poll failed: ${res.status}`)
+    throw new Error(`Poll failed: ${res.status} (non-JSON response)`)
   }
   if (!res.ok) {
     console.error('Poll error:', res.status, data)
@@ -103,9 +129,16 @@ export async function generateImage(
 
   let delay = 1000
   const maxDelay = 5000
+  const maxPollDuration = 10 * 60 * 1000
+  const startTime = Date.now()
 
   while (true) {
     await sleep(delay)
+
+    if (Date.now() - startTime > maxPollDuration) {
+      throw new Error('Generation timed out')
+    }
+
     onStatus?.('Generating...')
     const result = await pollResult(polling_url)
 

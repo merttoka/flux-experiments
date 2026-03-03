@@ -11,6 +11,9 @@ export interface SimConfig {
 export interface SimHandle {
   cleanup: () => void
   getFrame: () => number
+  setSpeed: (s: number) => void
+  setDofParams: (exponent: number, focus: number, radius: number, iterations: number) => void
+  setColorParams: (r: number, g: number, b: number, fadeRate: number) => void
   canvas: HTMLCanvasElement
   resolution: number
   agentCount: number
@@ -70,6 +73,10 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
   const dofUniforms = new Float32Array([0.9, 1.4, 0.8, 30])
   const dofBuffer = wgpu.createAndSetBuffer(dofUniforms, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST)
 
+  // Color params: stoppedR, stoppedG, stoppedB, fadeRate
+  const colorUniforms = new Float32Array([0.01, 0.8, 1.3, 0.20])
+  const colorUniformBuffer = wgpu.createAndSetBuffer(colorUniforms, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST)
+
   // Textures
   const outTexture = wgpu.createTexture(S.width, S.height)
   const dlaTexRead = wgpu.createTexture(S.width, S.height)
@@ -79,14 +86,14 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
   const agentBehavior = wgpu.createComputePipeline(agentsWGSL, 'main')
   const computeBindGroup = wgpu.createBindGroup({
     pipeline: agentBehavior, group: 0,
-    bindings: [uniformBuffer, agentsBuffer, positionsBuffer, dlaTexRead.createView(), dlaTexWrite.createView()],
+    bindings: [uniformBuffer, agentsBuffer, positionsBuffer, dlaTexRead.createView(), dlaTexWrite.createView(), colorUniformBuffer],
   })
 
   const parent = wgpu.createComputePipeline(agentsWGSL, 'parent')
   const parentBindGroup = wgpu.createBindGroup({ pipeline: parent, group: 0, bindings: [agentsBuffer] })
 
   const fade = wgpu.createComputePipeline(agentsWGSL, 'fade')
-  const fadeBindGroup = wgpu.createBindGroup({ pipeline: fade, group: 0, bindings: [colorBuffer] })
+  const fadeBindGroup = wgpu.createBindGroup({ pipeline: fade, group: 0, bindings: [colorBuffer, colorUniformBuffer] })
 
   const dof = wgpu.createComputePipeline(dofWGSL, 'dof')
   const dofBindGroup = wgpu.createBindGroup({ pipeline: dof, group: 0, bindings: [uniformBuffer, agentsBuffer, colorBuffer, dofBuffer] })
@@ -123,16 +130,17 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
   })
   wgpu.device.queue.submit([encoder0.finish()])
 
-  const dispatchRenderPass = wgpu.drawTextureToCanvasPass(outTexture)
+  const renderPass = wgpu.drawTextureToCanvasPass(outTexture)
 
   let frame = 0
   let running = true
   let accumulator = 0
+  let currentSpeed = speed
 
   const draw = () => {
     if (!running) return
 
-    accumulator += speed
+    accumulator += currentSpeed
     const stepsThisFrame = Math.floor(accumulator)
     accumulator -= stepsThisFrame
 
@@ -151,7 +159,7 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
     }
 
     // Always render — redraws last state even when no sim step occurred
-    dispatchRenderPass(encoder)
+    renderPass.dispatch(encoder)
     wgpu.device.queue.submit([encoder.finish()])
 
     if (stepsThisFrame > 0) {
@@ -168,6 +176,21 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
       wgpu.device.destroy()
     },
     getFrame: () => frame,
+    setSpeed: (s: number) => { currentSpeed = s; accumulator = 0 },
+    setDofParams: (exponent: number, focus: number, radius: number, iterations: number) => {
+      dofUniforms[0] = exponent
+      dofUniforms[1] = focus
+      dofUniforms[2] = radius
+      dofUniforms[3] = iterations
+      wgpu.device.queue.writeBuffer(dofBuffer, 0, dofUniforms)
+    },
+    setColorParams: (r: number, g: number, b: number, fadeRate: number) => {
+      colorUniforms[0] = r
+      colorUniforms[1] = g
+      colorUniforms[2] = b
+      colorUniforms[3] = fadeRate
+      wgpu.device.queue.writeBuffer(colorUniformBuffer, 0, colorUniforms)
+    },
     canvas,
     resolution: size,
     agentCount: count,

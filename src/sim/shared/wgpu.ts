@@ -7,7 +7,7 @@ export interface WGPUContext {
   createTexture: (width: number, height: number, usage?: number) => GPUTexture
   createAndSetBuffer: (data: Float32Array | Uint8Array, usage: number) => GPUBuffer
   createComputePipeline: (code: string, fn: string) => GPUComputePipeline
-  drawTextureToCanvasPass: (texture: GPUTexture) => (encoder: GPUCommandEncoder) => void
+  drawTextureToCanvasPass: (texture: GPUTexture) => { dispatch: (encoder: GPUCommandEncoder) => void; setBgColor: (r: number, g: number, b: number) => void }
   dispatchComputePass: (settings: ComputePassSettings) => void
 }
 
@@ -149,12 +149,14 @@ export const setupWebGPU = async (
       bindings: [sampler, texture.createView()],
     })
 
-    return (commandEncoder: GPUCommandEncoder) => {
+    const bgColor = { r: 0, g: 0, b: 0 }
+
+    const dispatch = (commandEncoder: GPUCommandEncoder) => {
       const pass = commandEncoder.beginRenderPass({
         colorAttachments: [
           {
             view: context.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            clearValue: { r: bgColor.r, g: bgColor.g, b: bgColor.b, a: 1 },
             loadOp: 'clear' as GPULoadOp,
             storeOp: 'store' as GPUStoreOp,
           },
@@ -165,6 +167,14 @@ export const setupWebGPU = async (
       pass.draw(6, 1, 0, 0)
       pass.end()
     }
+
+    const setBgColor = (r: number, g: number, b: number) => {
+      bgColor.r = r
+      bgColor.g = g
+      bgColor.b = b
+    }
+
+    return { dispatch, setBgColor }
   }
 
   const dispatchComputePass = (settings: ComputePassSettings) => {

@@ -35,6 +35,16 @@ struct Particle {
 @group(0) @binding(4)
   var dlaTexWrite : texture_storage_2d<rgba8unorm, write>;
 
+struct ColorParams {
+  stoppedR: f32,
+  stoppedG: f32,
+  stoppedB: f32,
+  fadeRate: f32,
+}
+
+@group(0) @binding(5)
+  var<uniform> colorParams : ColorParams;
+
 
 fn index(coords : vec2i) -> i32 {
   return coords.x + coords.y * i32(params.dimensions.x);
@@ -93,9 +103,9 @@ fn main(@builtin(global_invocation_id) id : vec3u) {
       if(found) {
         p.stopped = 1;
         textureStore(dlaTexWrite, coords, vec4(1.0, 0.0, 0.0, 1.0));
-        p.color.r = 0.01;
-        p.color.g = 0.8;
-        p.color.b = 1.3;
+        p.color.r = colorParams.stoppedR;
+        p.color.g = colorParams.stoppedG;
+        p.color.b = colorParams.stoppedB;
         positions[index(coords)] = i32(id.x);
         break;
       }
@@ -170,8 +180,10 @@ struct Color {
 @group(0) @binding(0)
   var<storage, read_write> colorBuffer : array<Color>;
 
+@group(0) @binding(1)
+  var<uniform> fadeColorParams : ColorParams;
 
 @compute @workgroup_size(256)
 fn fade(@builtin(global_invocation_id) id : vec3u) {
-  colorBuffer[id.x].color = colorBuffer[id.x].color * 0.20;
+  colorBuffer[id.x].color = colorBuffer[id.x].color * fadeColorParams.fadeRate;
 }

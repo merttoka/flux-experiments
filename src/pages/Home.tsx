@@ -8,8 +8,8 @@ const demos = [
     description: 'Upload an image and transform it through curated style presets using FLUX image-to-image generation.',
   },
   {
-    path: '/emergent-worlds',
-    title: 'Emergent Worlds',
+    path: '/flux-reimagined-ecosystems',
+    title: 'FLUX Reimagined Ecosystems',
     label: 'sim → flux',
     description: 'Watch a DLA simulation grow, then let FLUX reinterpret its emergent structures into vivid imagined ecosystems.',
   },
