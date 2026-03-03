@@ -1105,12 +1105,12 @@ export default function StyleBridge() {
                         cursor: 'pointer',
                         fontSize: '0.65rem',
                         fontFamily: 'var(--font-mono)',
-                        opacity: 0.5,
+                        opacity: 1,
                         padding: '2px 4px',
                         transition: 'opacity 0.15s, color 0.15s',
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
                       title="Delete from gallery"
                     >
                       delete

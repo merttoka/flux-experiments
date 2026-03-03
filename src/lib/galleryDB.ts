@@ -110,7 +110,10 @@ export async function estimateStorageBytes(): Promise<number> {
 }
 
 export async function urlToDataUrl(url: string): Promise<string> {
-  const res = await fetch(url)
+  // Proxy through our API to avoid CORS issues with S3 presigned URLs
+  const apiBase = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
+  const res = await fetch(`${apiBase}/image-proxy?url=${encodeURIComponent(url)}`)
+  if (!res.ok) throw new Error(`Image proxy failed: ${res.status}`)
   const blob = await res.blob()
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

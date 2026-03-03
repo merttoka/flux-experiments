@@ -34,6 +34,24 @@ function bflProxy(): Plugin {
         }
       })
 
+      server.middlewares.use('/api/image-proxy', async (req, res) => {
+        try {
+          const reqUrl = new URL(req.originalUrl || req.url || '', 'http://localhost')
+          const imageUrl = reqUrl.searchParams.get('url')
+          if (!imageUrl) { res.statusCode = 400; res.end('url param required'); return }
+          const resp = await fetch(imageUrl)
+          if (!resp.ok) { res.statusCode = resp.status; res.end(); return }
+          const ct = resp.headers.get('content-type')
+          if (ct) res.setHeader('Content-Type', ct)
+          const buf = Buffer.from(await resp.arrayBuffer())
+          res.end(buf)
+        } catch (err) {
+          console.error('[bfl] image-proxy error:', err)
+          res.statusCode = 500
+          res.end(String(err))
+        }
+      })
+
       server.middlewares.use('/api/result', async (req, res) => {
         try {
           const apiKey = req.headers['x-bfl-key'] as string
