@@ -2,15 +2,27 @@ import { setupWebGPU } from '../shared/wgpu'
 import agentsWGSL from './agents.wgsl?raw'
 import dofWGSL from './dof.wgsl?raw'
 
+export interface SimConfig {
+  resolution?: number
+  seedCount?: number
+  speed?: number
+}
+
 export interface SimHandle {
   cleanup: () => void
   getFrame: () => number
   canvas: HTMLCanvasElement
+  resolution: number
+  agentCount: number
+  seedCount: number
+  speed: number
 }
 
-export async function init(canvas: HTMLCanvasElement, resolution = 640): Promise<SimHandle> {
-  const size = resolution
-  // Scale agent count proportionally to area (200k for 1024x1024)
+export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): Promise<SimHandle> {
+  const size = config.resolution ?? 640
+  const seedCount = config.seedCount ?? 1
+  const speed = config.speed ?? 1
+
   const baseArea = 1024 * 1024
   const count = Math.floor(200000 * (size * size) / baseArea)
   const S = { count, width: size, height: size, frame: 0 }
@@ -33,7 +45,6 @@ export async function init(canvas: HTMLCanvasElement, resolution = 640): Promise
     agents[i * stride + offset++] = 0
     agents[i * stride + offset++] = 1
     agents[i * stride + offset++] = -1
-    // stride slot 11 unused
   }
   const agentsBuffer = wgpu.createAndSetBuffer(agents, GPUBufferUsage.STORAGE)
 
@@ -47,9 +58,6 @@ export async function init(canvas: HTMLCanvasElement, resolution = 640): Promise
   const colorStride = 4
   const colors = new Float32Array(posCount * colorStride)
   for (let i = 0; i < posCount; i++) {
-    colors[i * colorStride + 0] = 0
-    colors[i * colorStride + 1] = 0
-    colors[i * colorStride + 2] = 0
     colors[i * colorStride + 3] = 255
   }
   const colorBuffer = wgpu.createAndSetBuffer(colors, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC)
@@ -86,8 +94,26 @@ export async function init(canvas: HTMLCanvasElement, resolution = 640): Promise
   const copy = wgpu.createComputePipeline(dofWGSL, 'copy')
   const copyBindGroup = wgpu.createBindGroup({ pipeline: copy, group: 0, bindings: [uniformBuffer, colorBuffer, outTexture.createView()] })
 
+  // Seed positions — random locations with margin
+  const margin = size * 0.15
+  const seedPositionsData = new Float32Array(Math.max(seedCount, 1) * 4) // vec4f per seed
+  for (let i = 0; i < seedCount; i++) {
+    seedPositionsData[i * 4 + 0] = margin + Math.random() * (size - margin * 2)
+    seedPositionsData[i * 4 + 1] = margin + Math.random() * (size - margin * 2)
+    seedPositionsData[i * 4 + 2] = 0 // padding
+    seedPositionsData[i * 4 + 3] = 0
+  }
+  const seedPosBuffer = wgpu.createAndSetBuffer(seedPositionsData, GPUBufferUsage.STORAGE)
+
+  // Seed params uniform
+  const seedParamsData = new Float32Array([seedCount, 0, 0, 0])
+  const seedParamsBuffer = wgpu.createAndSetBuffer(seedParamsData, GPUBufferUsage.UNIFORM)
+
   const resetTex = wgpu.createComputePipeline(agentsWGSL, 'reset')
-  const resetTexBindGroup = wgpu.createBindGroup({ pipeline: resetTex, group: 0, bindings: [dlaTexWrite.createView()] })
+  const resetTexBindGroup = wgpu.createBindGroup({
+    pipeline: resetTex, group: 0,
+    bindings: [dlaTexWrite.createView(), seedParamsBuffer, seedPosBuffer],
+  })
 
   // Run reset
   const encoder0 = wgpu.device.createCommandEncoder()
@@ -101,24 +127,36 @@ export async function init(canvas: HTMLCanvasElement, resolution = 640): Promise
 
   let frame = 0
   let running = true
+  let accumulator = 0
 
   const draw = () => {
     if (!running) return
+
+    accumulator += speed
+    const stepsThisFrame = Math.floor(accumulator)
+    accumulator -= stepsThisFrame
+
     const encoder = wgpu.device.createCommandEncoder()
 
-    wgpu.dispatchComputePass({ pipeline: agentBehavior, bindGroup: computeBindGroup, workGroups: [Math.ceil(S.count / 256), 1, 1], encoder })
-    encoder.copyTextureToTexture({ texture: dlaTexWrite }, { texture: dlaTexRead }, { width: S.width, height: S.height })
-    wgpu.dispatchComputePass({ pipeline: parent, bindGroup: parentBindGroup, workGroups: [Math.ceil(S.count / 256), 1, 1], encoder })
-    wgpu.dispatchComputePass({ pipeline: dof, bindGroup: dofBindGroup, workGroups: [Math.ceil(S.count / 256), 1, 1], encoder })
-    wgpu.dispatchComputePass({ pipeline: copy, bindGroup: copyBindGroup, workGroups: [Math.ceil(S.width / 16), Math.ceil(S.height / 16), 1], encoder })
-    wgpu.dispatchComputePass({ pipeline: fade, bindGroup: fadeBindGroup, workGroups: [Math.ceil((S.width * S.height) / 256), 1, 1], encoder })
+    for (let step = 0; step < stepsThisFrame; step++) {
+      wgpu.dispatchComputePass({ pipeline: agentBehavior, bindGroup: computeBindGroup, workGroups: [Math.ceil(S.count / 256), 1, 1], encoder })
+      encoder.copyTextureToTexture({ texture: dlaTexWrite }, { texture: dlaTexRead }, { width: S.width, height: S.height })
+      wgpu.dispatchComputePass({ pipeline: parent, bindGroup: parentBindGroup, workGroups: [Math.ceil(S.count / 256), 1, 1], encoder })
+      wgpu.dispatchComputePass({ pipeline: dof, bindGroup: dofBindGroup, workGroups: [Math.ceil(S.count / 256), 1, 1], encoder })
+      wgpu.dispatchComputePass({ pipeline: copy, bindGroup: copyBindGroup, workGroups: [Math.ceil(S.width / 16), Math.ceil(S.height / 16), 1], encoder })
+      wgpu.dispatchComputePass({ pipeline: fade, bindGroup: fadeBindGroup, workGroups: [Math.ceil((S.width * S.height) / 256), 1, 1], encoder })
 
+      uniforms[3]++
+      frame++
+    }
+
+    // Always render — redraws last state even when no sim step occurred
     dispatchRenderPass(encoder)
     wgpu.device.queue.submit([encoder.finish()])
 
-    uniforms[3]++
-    frame++
-    wgpu.device.queue.writeBuffer(uniformBuffer, 0, uniforms)
+    if (stepsThisFrame > 0) {
+      wgpu.device.queue.writeBuffer(uniformBuffer, 0, uniforms)
+    }
 
     requestAnimationFrame(draw)
   }
@@ -131,5 +169,9 @@ export async function init(canvas: HTMLCanvasElement, resolution = 640): Promise
     },
     getFrame: () => frame,
     canvas,
+    resolution: size,
+    agentCount: count,
+    seedCount,
+    speed,
   }
 }

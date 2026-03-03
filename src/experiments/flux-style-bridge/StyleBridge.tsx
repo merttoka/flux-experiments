@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from 'react'
-import { generateImage, MODELS, isFlux2Model, type ModelValue } from '../../lib/bfl'
+import { generateImage, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
 import { presets } from './presets'
 
 export default function StyleBridge() {
@@ -55,7 +55,7 @@ export default function StyleBridge() {
     setStatus('Submitting...')
 
     try {
-      const params: any = { prompt: prompt.trim(), model }
+      const params: GenerationParams = { prompt: prompt.trim(), model }
 
       if (sourceBase64) {
         if (isFlux2Model(model)) {
@@ -67,8 +67,8 @@ export default function StyleBridge() {
 
       const url = await generateImage(params, setStatus)
       setResultUrl(url)
-    } catch (err: any) {
-      setStatus(`Error: ${err.message}`)
+    } catch (err: unknown) {
+      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setGenerating(false)
     }

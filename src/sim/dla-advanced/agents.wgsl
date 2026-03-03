@@ -132,14 +132,34 @@ fn parent(@builtin(global_invocation_id) id : vec3u) {
 }
 
 
+struct SeedParams {
+  seedCount: f32,
+  _pad1: f32,
+  _pad2: f32,
+  _pad3: f32,
+}
+
 @group(0) @binding(0)
   var resetTex : texture_storage_2d<rgba8unorm, write>;
 
+@group(0) @binding(1)
+  var<uniform> seedParams : SeedParams;
+
+@group(0) @binding(2)
+  var<storage, read> seedPositions : array<vec4f>;
+
 @compute @workgroup_size(16, 16)
 fn reset(@builtin(global_invocation_id) id : vec3u) {
-  var c =  vec4(0.0, 0.0, 0.0, 1.0);
-  var center = vec2(450.0, 600.0);
-  c.r = step(distance(vec2f(id.xy), center), 3);
+  var c = vec4(0.0, 0.0, 0.0, 1.0);
+  let p = vec2f(id.xy);
+  let count = i32(seedParams.seedCount);
+  for (var i = 0; i < count; i++) {
+    let center = seedPositions[i].xy;
+    if (distance(p, center) <= 3.0) {
+      c.r = 1.0;
+      break;
+    }
+  }
   textureStore(resetTex, id.xy, c);
 }
 
