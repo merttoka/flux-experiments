@@ -3,6 +3,34 @@ export interface StylePreset {
   promptPrefix: string
 }
 
+export function blendPrompts(presetA: StylePreset, presetB: StylePreset, weight: number, promptA: string, promptB: string): string {
+  // weight = % for preset A (0-100)
+  if (presetA.name === presetB.name || weight >= 95) {
+    return promptA
+  }
+  if (weight <= 5) {
+    return promptB
+  }
+
+  const a = presetA.name
+  const b = presetB.name
+  let blendInfo: string
+
+  if (weight >= 75) {
+    blendInfo = `Primarily in the style of ${a}. Subtle hints of ${b}.`
+  } else if (weight > 55) {
+    blendInfo = `Blending ${a} with ${b}, leaning more toward ${a}.`
+  } else if (weight >= 45) {
+    blendInfo = `An equal blend of ${a} and ${b} styles.`
+  } else if (weight > 25) {
+    blendInfo = `Blending ${b} with ${a}, leaning more toward ${b}.`
+  } else {
+    blendInfo = `Primarily in the style of ${b}. Subtle hints of ${a}.`
+  }
+
+  return `${blendInfo}\n${a}: ${promptA.trim()}\n${b}: ${promptB.trim()}`
+}
+
 export const presets: StylePreset[] = [
   {
     name: 'Bioluminescent Deep Sea',
