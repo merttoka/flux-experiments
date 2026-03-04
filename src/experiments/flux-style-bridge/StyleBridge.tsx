@@ -96,7 +96,58 @@ interface GalleryEntry {
   settings2?: GallerySettings
   isCompare?: boolean
   compareWarning?: string
+  isExample?: boolean
 }
+
+const EX = `${import.meta.env.BASE_URL}examples/style-bridge`
+const EXAMPLE_GALLERY: GalleryEntry[] = [
+  {
+    sourceImage: null,
+    resultUrl: `${EX}/1-result.jpg`,
+    prompt: 'Reimagined as a rain-soaked cyberpunk night scene. Saturated neon signs in hot pink and electric blue reflect off wet asphalt and chrome surfaces. Dense atmospheric haze diffuses the light sources into soft haloes. Shot on Sony A1 with 24mm f/1.4 GM lens, long exposure at ISO 3200, chromatic aberration on the neon edges. A bustling Tokyo alleyway at midnight.',
+    timestamp: 1772571600000,
+    settings: { model: 'Klein 9B', seed: 42, format: 'jpeg', safety: 2, size: '1024×1024' },
+    isExample: true,
+  },
+  {
+    sourceImage: `${EX}/2-source.jpg`,
+    resultUrl: `${EX}/2-result.jpg`,
+    prompt: 'Reimagined as a Dutch Golden Age oil painting with rich chiaroscuro lighting. Warm Rembrandt lighting from the upper left illuminates the subject against a deep umber background. Visible brushstrokes in impasto technique, craquelure texture on the surface, gallery-lit with soft museum spotlights. Oil on canvas, 17th century masterwork.',
+    timestamp: 1772571660000,
+    settings: { model: 'Pro', seed: 77, format: 'jpeg', safety: 2, size: '2048×2048' },
+    isExample: true,
+  },
+  {
+    sourceImage: `${EX}/3-source.jpg`,
+    resultUrl: `${EX}/3-result.jpg`,
+    prompt: 'Blending Bioluminescent Deep Sea with Art Deco, leaning more toward Bioluminescent Deep Sea.\nBioluminescent Deep Sea: Reimagined as an underwater deep-sea scene with bioluminescent organisms casting soft cyan and violet light through dark ocean water.\nArt Deco: Reimagined as an Art Deco poster from 1920s Paris with bold geometric forms and symmetrical sunburst patterns.',
+    timestamp: 1772571720000,
+    settings: { model: 'Max', seed: 101, format: 'jpeg', safety: 2, size: '1024×1391', upsampling: true },
+    isExample: true,
+  },
+  {
+    sourceImage: `${EX}/4-source.jpg`,
+    resultUrl: `${EX}/4-result-a.jpg`,
+    resultUrl2: `${EX}/4-result-b.jpg`,
+    prompt: 'Reimagined as a 1940s film noir scene in high-contrast black and white. Hard light from a single bare bulb casts sharp venetian blind shadows across the composition. Fog drifts through the frame catching shafts of backlight. Shot on 35mm Kodak Double-X film stock, 50mm f/2 Summicron lens wide open.',
+    timestamp: 1772571780000,
+    settings: { model: 'Pro', seed: 200, format: 'jpeg', safety: 2, size: '1088 × 768' },
+    settings2: { model: 'Max', seed: 200, format: 'jpeg', safety: 2, size: '1088 × 768' },
+    isCompare: true,
+    isExample: true,
+  },
+  {
+    sourceImage: `${EX}/5-source.jpg`,
+    resultUrl: `${EX}/5-result-a.jpg`,
+    resultUrl2: `${EX}/5-result-b.jpg`,
+    prompt: 'An equal blend of Retro-Futurism and Solarpunk styles.\nRetro-Futurism: Reimagined as a 1970s science fiction book cover illustration with warm analog color palette.\nSolarpunk: Reimagined as a solarpunk utopia where organic architecture merges with lush vertical gardens.',
+    timestamp: 1772571840000,
+    settings: { model: 'Flex', seed: 333, format: 'jpeg', safety: 2, size: '640 × 288', steps: 50, guidance: 5 },
+    settings2: { model: '1.1 Ultra', seed: 333, format: 'jpeg', safety: 2, upsampling: true },
+    isCompare: true,
+    isExample: true,
+  },
+]
 
 function modelShortLabel(m: ModelValue): string {
   const full = MODELS.find(x => x.value === m)?.label ?? m
@@ -233,12 +284,13 @@ export default function StyleBridge() {
   const [gallery, setGallery] = useState<GalleryEntry[]>([])
   const [galleryLoaded, setGalleryLoaded] = useState(false)
   const [storageSize, setStorageSize] = useState(0)
-  const [galleryView, setGalleryView] = useState<'list' | 'thumb'>('list')
+  const [galleryView, setGalleryView] = useState<'list' | 'thumb'>('thumb')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [status, setStatus] = useState('')
   const [generating, setGenerating] = useState(false)
   const [dragover, setDragover] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const advancedRef = useRef<HTMLDivElement>(null)
   const [hasKey, setHasKey] = useState(hasApiKey())
 
   useEffect(() => {
@@ -274,6 +326,17 @@ export default function StyleBridge() {
   const [raw, setRaw] = useState(false)
   const [imagePromptStrength, setImagePromptStrength] = useState(0.1)
   const [helpHover, setHelpHover] = useState<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (!advancedOpen) return
+    const onClick = (e: globalThis.MouseEvent) => {
+      if (advancedRef.current && !advancedRef.current.contains(e.target as Node)) {
+        setAdvancedOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [advancedOpen])
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return
@@ -341,6 +404,9 @@ export default function StyleBridge() {
   const capRaw = capCheck(MODELS_WITH_RAW, model, m2)
   const capImgStrength = capCheck(MODELS_WITH_IMG_STRENGTH, model, m2)
   const capImg2Img = capCheck(MODELS_WITH_IMG2IMG, model, m2)
+
+  const showingExamples = galleryLoaded && gallery.length === 0
+  const displayGallery = showingExamples ? EXAMPLE_GALLERY : gallery
 
   const refreshStorageSize = useCallback(() => {
     estimateStorageBytes().then(setStorageSize)
@@ -473,13 +539,13 @@ export default function StyleBridge() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightboxIndex(null)
       if (e.key === 'ArrowLeft') setLightboxIndex((i) => i !== null && i > 0 ? i - 1 : i)
-      if (e.key === 'ArrowRight') setLightboxIndex((i) => i !== null && i < gallery.length - 1 ? i + 1 : i)
+      if (e.key === 'ArrowRight') setLightboxIndex((i) => i !== null && i < displayGallery.length - 1 ? i + 1 : i)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightboxIndex, gallery.length])
+  }, [lightboxIndex, displayGallery.length])
 
-  const lightboxEntry = lightboxIndex !== null ? gallery[lightboxIndex] : null
+  const lightboxEntry = lightboxIndex !== null ? displayGallery[lightboxIndex] : null
 
   const labelStyle = {
     color: 'var(--text-muted)',
@@ -657,7 +723,7 @@ export default function StyleBridge() {
       </div>
 
       {/* Model + Compare + Advanced Settings */}
-      <div className="control-group" style={{ marginBottom: '1rem', position: 'relative' }}>
+      <div ref={advancedRef} className="control-group" style={{ marginBottom: '1rem', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
           <label className="control-label" style={{ marginBottom: 0 }}>Model{compareEnabled ? ' A' : ''}</label>
           <div
@@ -1012,11 +1078,11 @@ export default function StyleBridge() {
       )}
 
       {/* Gallery */}
-      {gallery.length > 0 && (
+      {displayGallery.length > 0 && (
         <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div className="control-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            Gallery ({gallery.length})
-            <Tip text={`Stored locally in IndexedDB. \n\nCurrent size: ${storageSize < 1024 ? storageSize + ' B' : storageSize < 1048576 ? (storageSize / 1024).toFixed(1) + ' KB' : (storageSize / 1048576).toFixed(1) + ' MB'}`} />
+            {showingExamples ? 'Examples' : `Gallery (${gallery.length})`}
+            {!showingExamples && <Tip text={`Stored locally in IndexedDB. \n\nCurrent size: ${storageSize < 1024 ? storageSize + ' B' : storageSize < 1048576 ? (storageSize / 1024).toFixed(1) + ' KB' : (storageSize / 1048576).toFixed(1) + ' MB'}`} />}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
               {(['list', 'thumb'] as const).map(v => (
                 <button
@@ -1031,7 +1097,7 @@ export default function StyleBridge() {
           {galleryView === 'list' ? (
             /* List view */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {gallery.map((entry, i) => (
+              {displayGallery.map((entry, i) => (
                 <div
                   key={entry.timestamp}
                   onClick={() => setLightboxIndex(i)}
@@ -1062,8 +1128,15 @@ export default function StyleBridge() {
                       )}
                       <div>
                         <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Result</div>
-                        <div className="image-display">
+                        <div className="image-display" style={{ position: 'relative' }}>
                           <img src={entry.resultUrl} alt="Generated" />
+                          <span style={{
+                            position: 'absolute', top: 8, right: 8,
+                            padding: '2px 8px', background: 'rgba(0,0,0,0.6)',
+                            color: '#fff', fontSize: '0.65rem', fontFamily: 'var(--font-mono)',
+                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                            borderRadius: 4, pointerEvents: 'none',
+                          }}>{entry.settings.model}</span>
                         </div>
                       </div>
                     </div>
@@ -1095,26 +1168,28 @@ export default function StyleBridge() {
                         <SettingsTags s={entry.settings2} />
                       </>
                     )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeFromGallery(entry.timestamp) }}
-                      style={{
-                        marginLeft: 'auto',
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        fontSize: '0.65rem',
-                        fontFamily: 'var(--font-mono)',
-                        opacity: 1,
-                        padding: '2px 4px',
-                        transition: 'opacity 0.15s, color 0.15s',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
-                      title="Delete from gallery"
-                    >
-                      delete
-                    </button>
+                    {!entry.isExample && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeFromGallery(entry.timestamp) }}
+                        style={{
+                          marginLeft: 'auto',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          fontSize: '0.65rem',
+                          fontFamily: 'var(--font-mono)',
+                          opacity: 1,
+                          padding: '2px 4px',
+                          transition: 'opacity 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
+                        title="Delete from gallery"
+                      >
+                        delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1126,7 +1201,7 @@ export default function StyleBridge() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
               gap: '0.5rem',
             }}>
-              {gallery.map((entry, i) => (
+              {displayGallery.map((entry, i) => (
                 <div
                   key={entry.timestamp}
                   onClick={() => setLightboxIndex(i)}
@@ -1152,11 +1227,20 @@ export default function StyleBridge() {
                         cover
                       />
                     ) : (
-                      <img
-                        src={entry.resultUrl}
-                        alt="Generated"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
+                      <>
+                        <img
+                          src={entry.resultUrl}
+                          alt="Generated"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                        <span style={{
+                          position: 'absolute', top: 8, right: 8,
+                          padding: '2px 8px', background: 'rgba(0,0,0,0.6)',
+                          color: '#fff', fontSize: '0.65rem', fontFamily: 'var(--font-mono)',
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                          borderRadius: 4, pointerEvents: 'none',
+                        }}>{entry.settings.model}</span>
+                      </>
                     )}
                   </div>
                   <div style={{
@@ -1169,23 +1253,25 @@ export default function StyleBridge() {
                     alignItems: 'center',
                   }}>
                     <span>{new Date(entry.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeFromGallery(entry.timestamp) }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        fontSize: '0.55rem',
-                        fontFamily: 'var(--font-mono)',
-                        opacity: 0.4,
-                        padding: 0,
-                        transition: 'opacity 0.15s, color 0.15s',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.color = 'var(--text-muted)' }}
-                      title="Delete"
-                    >×</button>
+                    {!entry.isExample && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeFromGallery(entry.timestamp) }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          fontSize: '0.55rem',
+                          fontFamily: 'var(--font-mono)',
+                          opacity: 0.4,
+                          padding: 0,
+                          transition: 'opacity 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                        title="Delete"
+                      >×</button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1300,25 +1386,27 @@ export default function StyleBridge() {
                   </>
                 )}
               </div>
-              <button
-                onClick={() => removeFromGallery(lightboxEntry.timestamp)}
-                style={{
-                  marginTop: '0.5rem',
-                  background: 'none',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: '0.7rem',
-                  fontFamily: 'var(--font-mono)',
-                  padding: '4px 12px',
-                  borderRadius: 4,
-                  transition: 'border-color 0.15s, color 0.15s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444' }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-              >
-                Delete
-              </button>
+              {!lightboxEntry.isExample && (
+                <button
+                  onClick={() => removeFromGallery(lightboxEntry.timestamp)}
+                  style={{
+                    marginTop: '0.5rem',
+                    background: 'none',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.7rem',
+                    fontFamily: 'var(--font-mono)',
+                    padding: '4px 12px',
+                    borderRadius: 4,
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                >
+                  Delete
+                </button>
+              )}
             </div>
 
             {/* Navigation */}
@@ -1331,12 +1419,12 @@ export default function StyleBridge() {
                 &larr; Newer
               </button>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>
-                {lightboxIndex! + 1} / {gallery.length}
+                {lightboxIndex! + 1} / {displayGallery.length}
               </span>
               <button
-                style={{ ...navBtnStyle, opacity: lightboxIndex === gallery.length - 1 ? 0.3 : 1 }}
-                disabled={lightboxIndex === gallery.length - 1}
-                onClick={() => setLightboxIndex((i) => i !== null && i < gallery.length - 1 ? i + 1 : i)}
+                style={{ ...navBtnStyle, opacity: lightboxIndex === displayGallery.length - 1 ? 0.3 : 1 }}
+                disabled={lightboxIndex === displayGallery.length - 1}
+                onClick={() => setLightboxIndex((i) => i !== null && i < displayGallery.length - 1 ? i + 1 : i)}
               >
                 Older &rarr;
               </button>

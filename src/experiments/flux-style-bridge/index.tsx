@@ -57,9 +57,11 @@ export default function FluxStyleBridge() {
   return (
     <div className="sim-page">
       <header className="sim-header">
-        <Link to="/">Lab</Link>
+        <a href="https://lab.merttoka.com">Lab</a>
         <span className="separator">/</span>
-        <span className="sim-title">FLUX Style Bridge</span>
+        <Link to="/">FLUX Demos</Link>
+        <span className="separator">/</span>
+        <span className="sim-title">Style Bridge</span>
         <UsageTip />
         <ApiKeyButton />
       </header>

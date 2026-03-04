@@ -9,8 +9,10 @@ Upload an image and transform it through curated style presets (bioluminescent, 
 
 - **Style DNA Mixer** — blend two style presets with a weighted slider. Each preset gets its own editable prompt textarea. Final prompt composes blending info + both style prompts.
 - **A/B Model Compare** — generate the same prompt+seed on two models in parallel. Results display with a draggable comparison slider (hover on desktop, drag on mobile).
-- **Gallery persistence** — generated images are converted to base64 and stored in IndexedDB. Survives page refreshes. Storage size shown on hover. List/thumbnail view toggle. Delete individual entries.
-- **Advanced settings** — union of both models' capabilities shown when comparing, with "[model] only" badges on exclusive settings.
+- **Example gallery** — 5 built-in examples (txt2img, img2img, style mixing, A/B compare) shown when gallery is empty so visitors without API keys can see what the tool produces.
+- **Gallery persistence** — generated images are converted to base64 and stored in IndexedDB. Survives page refreshes. Storage size shown on hover. Grid/list view toggle (grid default). Delete individual entries. Model label badge on result images.
+- **Compare slider** — auto-returns to center with easeInOut after 1s of no interaction.
+- **Advanced settings** — union of both models' capabilities shown when comparing, with "[model] only" badges on exclusive settings. Closes on click outside.
 
 ### FLUX Reimagined Ecosystems (`/flux-reimagined-ecosystems`)
 A WebGPU DLA (Diffusion-Limited Aggregation) simulation runs in real-time. Capture screenshots and send them to FLUX for artistic reinterpretation. Stage detection uses pixel-delta analysis (smoothed mean RGB diff on 64x64 downsample) instead of frame counts — stages transition based on actual visual change rate. Collapsible visual controls panel exposes DOF (exponent/focus/radius/iterations), stopped particle color (HDR RGB + fade rate), and background color sliders that update the GPU in real-time. Auto-capture stops at Mature stage. Full advanced FLUX settings (size, generation, output params).
@@ -28,7 +30,7 @@ Users provide their own BFL API key via the in-app settings button. Keys are sto
 
 ## Deploy
 
-Deployed on Vercel. Served under `lab.merttoka.com/bfl-api/` via rewrite from the lab project.
+Deployed on Vercel at `lab.merttoka.com`. Breadcrumb nav: Lab / FLUX Demos / [experiment].
 
 - `base: '/bfl-api/'` is set in `vite.config.ts` when `VERCEL` env is present
 - `vercel.json` rewrites `/bfl-api/api/*` to serverless functions and `/bfl-api/*` to the SPA

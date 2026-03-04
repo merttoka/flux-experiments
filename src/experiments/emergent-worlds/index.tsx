@@ -6,9 +6,11 @@ export default function EmergentWorldsPage() {
   return (
     <div className="sim-page">
       <header className="sim-header">
-        <Link to="/">Lab</Link>
+        <a href="https://lab.merttoka.com">Lab</a>
         <span className="separator">/</span>
-        <span className="sim-title">FLUX Reimagined Ecosystems</span>
+        <Link to="/">FLUX Demos</Link>
+        <span className="separator">/</span>
+        <span className="sim-title">Reimagined Ecosystems</span>
         <ApiKeyButton />
       </header>
       <EmergentWorlds />

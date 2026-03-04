@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type CSSProperties, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { useState, useRef, useCallback, useEffect, type CSSProperties, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 
 interface CompareSliderProps {
   imageA: string
@@ -11,21 +11,42 @@ interface CompareSliderProps {
 
 export default function CompareSlider({ imageA, imageB, labelA, labelB, style, cover }: CompareSliderProps) {
   const [position, setPosition] = useState(50)
+  const [animating, setAnimating] = useState(false)
   const [hovering, setHovering] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearResetTimer = useCallback(() => {
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current)
+      resetTimer.current = null
+    }
+  }, [])
+
+  const startResetTimer = useCallback(() => {
+    clearResetTimer()
+    resetTimer.current = setTimeout(() => {
+      setAnimating(true)
+      setPosition(50)
+    }, 1000)
+  }, [clearResetTimer])
+
+  useEffect(() => () => clearResetTimer(), [clearResetTimer])
 
   const updatePosition = useCallback((clientX: number) => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
+    setAnimating(false)
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width))
     setPosition((x / rect.width) * 100)
   }, [])
 
   // Desktop: hover moves the slider
   const onMouseMove = useCallback((e: ReactMouseEvent) => {
+    clearResetTimer()
     updatePosition(e.clientX)
-  }, [updatePosition])
+  }, [updatePosition, clearResetTimer])
 
   // Mobile: drag-based (pointerdown starts, pointermove updates)
   const onPointerDown = useCallback((e: ReactPointerEvent) => {
@@ -44,7 +65,8 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
 
   const onPointerUp = useCallback(() => {
     dragging.current = false
-  }, [])
+    startResetTimer()
+  }, [startResetTimer])
 
   const labelStyle: CSSProperties = {
     position: 'absolute',
@@ -65,8 +87,8 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
     <div
       ref={containerRef}
       onMouseMove={onMouseMove}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
+      onMouseEnter={() => { setHovering(true); clearResetTimer() }}
+      onMouseLeave={() => { setHovering(false); startResetTimer() }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -96,6 +118,7 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
         position: 'absolute',
         inset: 0,
         clipPath: `inset(0 ${100 - position}% 0 0)`,
+        transition: animating ? 'clip-path 0.6s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
       }}>
         <img
           src={imageA}
@@ -120,7 +143,7 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
         pointerEvents: 'none',
         boxShadow: '0 0 4px rgba(0,0,0,0.5)',
         opacity: hovering || dragging.current ? 1 : 0.5,
-        transition: 'opacity 0.15s',
+        transition: animating ? 'left 0.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s' : 'opacity 0.15s',
       }} />
 
       {/* Handle */}
@@ -142,7 +165,7 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
         pointerEvents: 'none',
         boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         opacity: hovering || dragging.current ? 1 : 0.5,
-        transition: 'opacity 0.15s',
+        transition: animating ? 'left 0.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s' : 'opacity 0.15s',
       }}>
         <svg width="60%" height="60%" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M4 8H12M4 8L6 6M4 8L6 10M12 8L10 6M12 8L10 10" stroke="#333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
