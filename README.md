@@ -5,6 +5,9 @@ Two interactive demos for BFL's FLUX image generation models. Vite+React+TS, dep
 ## Demos
 
 ### FLUX Style Bridge (`/flux-style-bridge`)
+
+![Style Bridge](public/screenshots/img2img.jpg)
+
 Upload an image and transform it through curated style presets (bioluminescent, brutalist, Dutch masters, etc.) using FLUX img2img. Or go text-only.
 
 - **Style DNA Mixer** — blend two style presets with a weighted slider. Each preset gets its own editable prompt textarea. Final prompt composes blending info + both style prompts.
@@ -15,6 +18,9 @@ Upload an image and transform it through curated style presets (bioluminescent, 
 - **Advanced settings** — union of both models' capabilities shown when comparing, with "[model] only" badges on exclusive settings. Closes on click outside.
 
 ### FLUX Reimagined Ecosystems (`/flux-reimagined-ecosystems`)
+
+![Reimagined Ecosystems](public/screenshots/sim2img.jpg)
+
 A WebGPU DLA (Diffusion-Limited Aggregation) simulation runs in real-time. Capture sequences of frames and batch-transform them via FLUX img2img.
 
 - **Capture + AI strips** — vertically aligned strips at sim bottom (captures) and bottom panel top (AI results). Scroll-synced.

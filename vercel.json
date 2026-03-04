@@ -6,6 +6,7 @@
     { "source": "/bfl-api/api/(.*)", "destination": "/api/$1" },
     { "source": "/bfl-api/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/bfl-api/examples/(.*)", "destination": "/examples/$1" },
+    { "source": "/bfl-api/screenshots/(.*)", "destination": "/screenshots/$1" },
     { "source": "/bfl-api/(.*)", "destination": "/" }
   ]
 }
