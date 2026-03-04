@@ -585,7 +585,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
   // Fetch AI image and convert to data URL
   const fetchAsDataUrl = useCallback(async (imageUrl: string): Promise<string> => {
     try {
-      const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`
+      const proxyUrl = `${import.meta.env.BASE_URL}api/image-proxy?url=${encodeURIComponent(imageUrl)}`
       const res = await fetch(proxyUrl)
       const blob = await res.blob()
       return await new Promise<string>((resolve) => {
@@ -688,7 +688,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
           const res = await fetch(url)
           return res.blob()
         }
-        const res = await fetch(`/api/image-proxy?url=${encodeURIComponent(url)}`)
+        const res = await fetch(`${import.meta.env.BASE_URL}api/image-proxy?url=${encodeURIComponent(url)}`)
         return res.blob()
       }
       // Captures
