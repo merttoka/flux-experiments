@@ -344,7 +344,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
   // AI frames — parallel to capturedFrames
   const [aiFrames, setAiFrames] = useState<(string | null)[]>([])
   const [transforming, setTransforming] = useState(false)
-  const [transformMode, setTransformMode] = useState<'chained' | 'parallel'>('chained')
+  const [transformMode, setTransformMode] = useState<'chained' | 'parallel'>('parallel')
   const [transformIndex, setTransformIndex] = useState(-1)
 
   // Downsample
@@ -682,29 +682,30 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
     setStatus('Exporting...')
     try {
       const zip = new JSZip()
+      // Helper: convert any URL (data:, blob:, http) to a Blob
+      const toBlob = async (url: string): Promise<Blob> => {
+        if (url.startsWith('data:') || url.startsWith('blob:')) {
+          const res = await fetch(url)
+          return res.blob()
+        }
+        const res = await fetch(`/api/image-proxy?url=${encodeURIComponent(url)}`)
+        return res.blob()
+      }
       // Captures
       for (let i = 0; i < capturedFrames.length; i++) {
         const cf = capturedFrames[i]
-        const b64 = cf.dataUrl.replace(/^data:image\/\w+;base64,/, '')
-        zip.file(`capture-${i}-f${cf.frame}.png`, b64, { base64: true })
+        const blob = await toBlob(cf.dataUrl)
+        zip.file(`capture-${i}-f${cf.frame}.png`, blob)
       }
       // AI results
       for (let i = 0; i < aiFrames.length; i++) {
         const url = aiFrames[i]
         if (!url) continue
-        if (url.startsWith('data:')) {
-          const match = url.match(/^data:image\/(\w+);base64,(.+)$/)
-          if (match) {
-            zip.file(`ai-${i}-f${capturedFrames[i]?.frame ?? i}.${match[1] === 'png' ? 'png' : 'jpg'}`, match[2], { base64: true })
-          }
-        } else {
-          try {
-            const fetchUrl = url.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(url)}` : url
-            const res = await fetch(fetchUrl)
-            const blob = await res.blob()
-            zip.file(`ai-${i}-f${capturedFrames[i]?.frame ?? i}.${blob.type.includes('png') ? 'png' : 'jpg'}`, blob)
-          } catch { /* skip */ }
-        }
+        try {
+          const blob = await toBlob(url)
+          const ext = blob.type.includes('png') ? 'png' : 'jpg'
+          zip.file(`ai-${i}-f${capturedFrames[i]?.frame ?? i}.${ext}`, blob)
+        } catch { /* skip */ }
       }
       // Metadata + settings
       const raw_settings = localStorage.getItem(STORAGE_KEY)
@@ -740,7 +741,75 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
     }
   }, [capturedFrames, aiFrames, prompt, model, dsWidth, dsHeight])
 
-  // Import session from zip
+  // Shared zip import logic
+  const importFromZip = useCallback(async (blob: Blob, label = 'Import') => {
+    setStatus(`${label}ing...`)
+    try {
+      const zip = await JSZip.loadAsync(blob)
+      const sessionFile = zip.file('session.json')
+      if (!sessionFile) { setStatus('Invalid archive: no session.json'); return }
+      const session = JSON.parse(await sessionFile.async('text'))
+
+      // Restore settings
+      if (session.settings) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(session.settings))
+        const s = session.settings as Partial<PersistedSettings>
+        if (s.model) setModel(s.model)
+        if (s.dsWidth) setDsWidth(s.dsWidth)
+        if (s.dsHeight) setDsHeight(s.dsHeight)
+        if (s.seedCount) setSeedCount(s.seedCount)
+        if (s.speed) setSpeed(s.speed)
+      }
+      if (session.prompt) setPrompt(session.prompt)
+      if (session.model) setModel(session.model as ModelValue)
+
+      // Restore frames
+      const frames: CapturedFrame[] = []
+      const ai: (string | null)[] = []
+      const frameMeta: { index: number; frame: number; timestamp: number; fps: number; speed: number; seedCount: number; resolution: number; agentCount: number; hasAi: boolean }[] = session.frames ?? []
+
+      for (const meta of frameMeta) {
+        const capFile = zip.file(new RegExp(`^capture-${meta.index}-`))?.[0]
+        if (!capFile) continue
+        const capBlob = await capFile.async('blob')
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsDataURL(capBlob)
+        })
+        frames.push({
+          dataUrl,
+          frame: meta.frame,
+          timestamp: meta.timestamp ?? Date.now(),
+          fps: meta.fps ?? 0,
+          speed: meta.speed ?? 1,
+          seedCount: meta.seedCount ?? 1,
+          resolution: meta.resolution ?? 0,
+          agentCount: meta.agentCount ?? 0,
+        })
+
+        if (meta.hasAi) {
+          const aiFile = zip.file(new RegExp(`^ai-${meta.index}-`))?.[0]
+          if (aiFile) {
+            const aiBlob = await aiFile.async('blob')
+            ai.push(URL.createObjectURL(aiBlob))
+          } else {
+            ai.push(null)
+          }
+        } else {
+          ai.push(null)
+        }
+      }
+
+      setCapturedFrames(frames)
+      setAiFrames(ai)
+      setStatus(`${label}ed ${frames.length} frames`)
+    } catch (err: unknown) {
+      setStatus(`${label} error: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }, [])
+
+  // Import session from zip file picker
   const doImport = useCallback(() => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -748,76 +817,23 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
-      setStatus('Importing...')
-      try {
-        const zip = await JSZip.loadAsync(file)
-        const sessionFile = zip.file('session.json')
-        if (!sessionFile) { setStatus('Invalid archive: no session.json'); return }
-        const session = JSON.parse(await sessionFile.async('text'))
-
-        // Restore settings
-        if (session.settings) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(session.settings))
-          // Apply key settings to state
-          const s = session.settings as Partial<PersistedSettings>
-          if (s.model) setModel(s.model)
-          if (s.dsWidth) setDsWidth(s.dsWidth)
-          if (s.dsHeight) setDsHeight(s.dsHeight)
-          if (s.seedCount) setSeedCount(s.seedCount)
-          if (s.speed) setSpeed(s.speed)
-        }
-        if (session.prompt) setPrompt(session.prompt)
-        if (session.model) setModel(session.model as ModelValue)
-
-        // Restore frames
-        const frames: CapturedFrame[] = []
-        const ai: (string | null)[] = []
-        const frameMeta: { index: number; frame: number; timestamp: number; fps: number; speed: number; seedCount: number; resolution: number; agentCount: number; hasAi: boolean }[] = session.frames ?? []
-
-        for (const meta of frameMeta) {
-          // Load capture image
-          const capFile = zip.file(new RegExp(`^capture-${meta.index}-`))?.[0]
-          if (!capFile) continue
-          const capBlob = await capFile.async('blob')
-          const dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.readAsDataURL(capBlob)
-          })
-          frames.push({
-            dataUrl,
-            frame: meta.frame,
-            timestamp: meta.timestamp ?? Date.now(),
-            fps: meta.fps ?? 0,
-            speed: meta.speed ?? 1,
-            seedCount: meta.seedCount ?? 1,
-            resolution: meta.resolution ?? 0,
-            agentCount: meta.agentCount ?? 0,
-          })
-
-          // Load AI image if present
-          if (meta.hasAi) {
-            const aiFile = zip.file(new RegExp(`^ai-${meta.index}-`))?.[0]
-            if (aiFile) {
-              const aiBlob = await aiFile.async('blob')
-              ai.push(URL.createObjectURL(aiBlob))
-            } else {
-              ai.push(null)
-            }
-          } else {
-            ai.push(null)
-          }
-        }
-
-        setCapturedFrames(frames)
-        setAiFrames(ai)
-        setStatus(`Imported ${frames.length} frames`)
-      } catch (err: unknown) {
-        setStatus(`Import error: ${err instanceof Error ? err.message : String(err)}`)
-      }
+      await importFromZip(file, 'Import')
     }
     input.click()
-  }, [])
+  }, [importFromZip])
+
+  // Load bundled example session
+  const loadExample = useCallback(async () => {
+    setStatus('Loading example...')
+    try {
+      const res = await fetch('/examples/emergent-worlds/example.zip')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      await importFromZip(blob, 'Load')
+    } catch (err: unknown) {
+      setStatus(`Example error: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }, [importFromZip])
 
   useImperativeHandle(ref, () => ({ doExport, doImport }), [doExport, doImport])
 
@@ -1487,6 +1503,47 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               })
             )}
           </div>
+          {/* Example session — shown when no captures */}
+          {capturedFrames.length === 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginTop: '0.35rem',
+              padding: '0.3rem 0',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.65rem',
+              color: 'var(--text-secondary)',
+            }}>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                {[0, 1, 2].map(i => (
+                  <img
+                    key={i}
+                    src={`/examples/emergent-worlds/preview-${i}.jpg`}
+                    alt={`Example preview ${i + 1}`}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      objectFit: 'cover',
+                      borderRadius: 3,
+                      border: '1px solid var(--border)',
+                      opacity: 0.7,
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={loadExample}
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.6rem' }}
+              >
+                Load Example
+              </button>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                9 frames + AI results
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1848,7 +1905,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
           {transforming && <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} />}
           {transforming && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{status}</span>}
           {!transforming && status && !status.startsWith('Done') && status !== 'Transform complete' && status !== 'Export complete' && (
-            <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{status}</span>
+            <span style={{ fontSize: '0.6rem', color: status.toLowerCase().includes('error') ? '#ef4444' : 'var(--text-muted)' }}>{status}</span>
           )}
 
           {/* Cancel */}
@@ -1930,6 +1987,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               </button>
             ))}
           </div>
+          <Tip text="Parallel (recommended): each frame feeds only its simulation capture to FLUX — all frames fire concurrently, so it's much faster. Chained: feeds the simulation frame + the previous AI output into the next frame, building on each result sequentially." align="top-left" />
         </div>
 
         {!modelHasImg2Img && (
