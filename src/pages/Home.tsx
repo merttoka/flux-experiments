@@ -31,14 +31,14 @@ export default function Home() {
 
       <div className="experiments-grid">
         {demos.map((d) => (
-          <div className="experiment-card" key={d.path}>
+          <Link to={d.path} key={d.path} className="experiment-card" style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="card-label">
               <span className="dot" />
               {d.label}
             </div>
-            <Link to={d.path}>{d.title}</Link>
+            <span className="card-title">{d.title}</span>
             <p className="card-description">{d.description}</p>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

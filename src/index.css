@@ -111,14 +111,16 @@ a:hover { color: #e0e0e0; }
   box-shadow: 0 0 20px var(--accent-glow), 0 4px 16px rgba(0,0,0,0.4);
   background: var(--bg-card-hover);
 }
-.experiment-card a {
+.experiment-card a,
+.experiment-card .card-title {
   color: var(--text-primary);
   text-decoration: none;
   display: block;
   font-weight: 500;
   font-size: 0.95rem;
 }
-.experiment-card:hover a { color: #fff; }
+.experiment-card:hover a,
+.experiment-card:hover .card-title { color: #fff; }
 
 .experiment-card .card-label {
   font-family: var(--font-mono);
