@@ -19,9 +19,11 @@ export default function Home() {
   return (
     <div className="lab-page">
       <header className="lab-header">
-        <h1 className="lab-title">
-          <span className="lab-title-accent">FLUX</span> Demos
-        </h1>
+        <div className="breadcrumb">
+          <a href="https://lab.merttoka.com">Lab</a>
+          <span className="separator">/</span>
+          <span className="current">FLUX Demos</span>
+        </div>
         <p className="lab-subtitle">
           Experiments with Black Forest Labs image generation
         </p>
