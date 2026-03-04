@@ -1459,6 +1459,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                         src={aiUrl}
                         alt={`ai-f.${cf.frame}`}
                         onClick={() => setLightbox(i)}
+                        onError={() => setAiFrames(prev => { const next = [...prev]; next[i] = null; return next })}
                         style={{
                           width: '100%',
                           height: '100%',
