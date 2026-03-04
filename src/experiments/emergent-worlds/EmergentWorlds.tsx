@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { generateImage, hasApiKey, canvasToBase64, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
 import { init, type SimHandle, type SimConfig } from '../../sim/dla-advanced/simulation'
-import { DEFAULT_PROMPT } from './prompts'
+import { DEFAULT_PROMPT, buildStructureSuffix, STRUCTURE_SUFFIX_TIP } from './prompts'
+import { presets as stylePresets } from '../flux-style-bridge/presets'
+import JSZip from 'jszip'
 
 const STORAGE_KEY = 'ew-settings'
 
@@ -31,6 +33,10 @@ interface PersistedSettings {
   promptUpsampling: boolean
   raw: boolean
   imagePromptStrength: number
+  dsWidth: number
+  dsHeight: number
+  simWidth: number
+  simHeight: number
 }
 
 function loadSettings(): Partial<PersistedSettings> {
@@ -46,7 +52,7 @@ function saveSettings(s: PersistedSettings) {
 
 const saved = loadSettings()
 
-function Tip({ text }: { text: string }) {
+function Tip({ text, align = 'center' }: { text: string; align?: 'center' | 'top-left' }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const onEnter = (e: ReactMouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -64,7 +70,7 @@ function Tip({ text }: { text: string }) {
           position: 'fixed',
           left: pos.x,
           top: pos.y - 6,
-          transform: 'translate(-50%, -100%)',
+          transform: align === 'top-left' ? 'translate(-100%, -100%)' : 'translate(-50%, -100%)',
           background: '#222',
           border: '1px solid var(--border)',
           borderRadius: 6,
@@ -72,7 +78,8 @@ function Tip({ text }: { text: string }) {
           fontSize: '0.7rem',
           fontFamily: 'var(--font-body)',
           color: 'var(--text-secondary)',
-          maxWidth: 220,
+          width: align === 'top-left' ? 360 : undefined,
+          maxWidth: 360,
           lineHeight: 1.4,
           zIndex: 9999,
           pointerEvents: 'none',
@@ -91,6 +98,7 @@ const MODELS_WITH_ASPECT_RATIO = new Set(['flux-pro-1.1-ultra'])
 const MODELS_WITH_DIMENSIONS = new Set(['flux-2-pro', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-4b', 'flux-pro-1.1'])
 const MODELS_WITH_RAW = new Set(['flux-pro-1.1-ultra'])
 const MODELS_WITH_IMG_STRENGTH = new Set(['flux-pro-1.1-ultra'])
+const MODELS_WITH_IMG2IMG = new Set(['flux-2-pro', 'flux-2-max', 'flux-2-flex', 'flux-pro-1.1-ultra'])
 
 const ASPECT_RATIOS = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21']
 
@@ -110,6 +118,76 @@ const PARAM_MATRIX: { param: string; models: Record<string, boolean> }[] = [
 ]
 const MODEL_COLUMNS = ['Pro', 'Max', 'Flex', 'Klein', '1.1 Pro', '1.1 Ultra']
 
+// Pricing
+const IMG2IMG_COST: Record<string, { perMP: number } | { perImage: number } | null> = {
+  'flux-2-pro': { perMP: 0.045 },
+  'flux-2-max': { perMP: 0.07 },
+  'flux-2-flex': { perMP: 0.10 },
+  'flux-2-klein-9b': null,
+  'flux-2-klein-4b': null,
+  'flux-pro-1.1': null,
+  'flux-pro-1.1-ultra': { perImage: 0.06 },
+}
+
+const DOWNSAMPLE_OPTIONS = [256, 384, 512, 768, 1024]
+
+function calcCost(model: string, dsW: number, dsH: number, frameCount: number): { mp: number; cost: number; breakdown: string } | null {
+  const pricing = IMG2IMG_COST[model]
+  if (!pricing) return null
+  const mp = (dsW * dsH) / 1_000_000
+  if ('perImage' in pricing) {
+    const cost = pricing.perImage * frameCount
+    return { mp, cost, breakdown: `$${pricing.perImage}/img × ${frameCount}` }
+  }
+  const costPerFrame = pricing.perMP * mp
+  const cost = costPerFrame * frameCount
+  return { mp, cost, breakdown: `$${pricing.perMP}/MP × ${mp.toFixed(2)}MP × ${frameCount}` }
+}
+
+async function downsampleImage(dataUrl: string, w: number, h: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('no 2d context')); return }
+      // Composite onto black — sim frames have transparent backgrounds
+      ctx.fillStyle = '#000000'
+      ctx.fillRect(0, 0, w, h)
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''))
+    }
+    img.onerror = () => reject(new Error('image load failed'))
+    img.src = dataUrl
+  })
+}
+
+/** Fetch a URL image and return as base64 PNG (for passing previous AI frames). */
+async function urlToBase64(url: string, w: number, h: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('no 2d context')); return }
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''))
+    }
+    img.onerror = () => reject(new Error('failed to load AI frame for reference'))
+    img.src = url
+  })
+}
+
+// IndexedDB helpers
+const IDB_NAME = 'ew-db'
+const IDB_STORE = 'ew-session'
+const IDB_VERSION = 1
+
 interface CapturedFrame {
   dataUrl: string
   frame: number
@@ -121,26 +199,110 @@ interface CapturedFrame {
   agentCount: number
 }
 
-interface GalleryEntry {
-  imageUrl: string
+interface SessionData {
+  capturedFrames: CapturedFrame[]
+  aiFrames: (string | null)[]
   prompt: string
+  model: ModelValue
   timestamp: number
-  simFrame: number
 }
 
-export default function EmergentWorlds() {
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE)
+      }
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function saveSession(data: SessionData): Promise<void> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(IDB_STORE, 'readwrite')
+    tx.objectStore(IDB_STORE).put(data, 'current')
+    db.close()
+  } catch { /* silent */ }
+}
+
+async function loadSession(): Promise<SessionData | null> {
+  try {
+    const db = await openDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const req = tx.objectStore(IDB_STORE).get('current')
+      req.onsuccess = () => { db.close(); resolve(req.result as SessionData | null ?? null) }
+      req.onerror = () => { db.close(); resolve(null) }
+    })
+  } catch { return null }
+}
+
+async function clearSessionDB(): Promise<void> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(IDB_STORE, 'readwrite')
+    tx.objectStore(IDB_STORE).delete('current')
+    db.close()
+  } catch { /* silent */ }
+}
+
+// Keyboard shortcut descriptions
+const SPEED_OPTIONS = [8, 5, 3, 2, 1, 0.75, 0.5, 0.25, 0.1]
+
+const SHORTCUTS: [string, string][] = [
+  ['Space', 'Pause / Resume sim'],
+  ['\u2191 / \u2193', 'Speed up / slow down'],
+  ['C', 'Capture frame'],
+  ['T', 'Transform untransformed'],
+  ['R', 'Reset simulation'],
+  ['X', 'Clear all captures + AI'],
+  ['E', 'Export session'],
+  ['\\', 'Hold to show shortcuts'],
+]
+
+function flashButton(key: string) {
+  const el = document.querySelector(`[data-shortcut="${key}"]`) as HTMLElement | null
+  if (!el) return
+  el.style.borderColor = 'var(--accent)'
+  el.style.color = 'var(--accent)'
+  el.style.transform = 'scale(0.95)'
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      el.style.borderColor = ''
+      el.style.color = ''
+      el.style.transform = ''
+    }, 150)
+  })
+}
+
+export interface EmergentWorldsHandle {
+  doExport: () => Promise<void>
+  doImport: () => void
+}
+
+const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(_props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const simRef = useRef<SimHandle | null>(null)
-  const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const captureStripRef = useRef<HTMLDivElement>(null)
+  const aiStripRef = useRef<HTMLDivElement>(null)
+  const scrollingRef = useRef(false)
+  const transformAbortRef = useRef<AbortController | null>(null)
+  const pauseAfterFrameRef = useRef<number | null>(null)
+  const visualRef = useRef<HTMLDivElement>(null)
+  const advancedRef = useRef<HTMLDivElement>(null)
+  const advancedToggleRef = useRef<HTMLDivElement>(null)
 
   const [model, setModel] = useState<ModelValue>(saved.model ?? 'flux-2-pro')
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
+  const [stylePreset, setStylePreset] = useState('')
   const [frameCount, setFrameCount] = useState(0)
-  const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState('')
-  const [autoGenerate, setAutoGenerate] = useState(false)
-  const [gallery, setGallery] = useState<GalleryEntry[]>([])
-  const [lightbox, setLightbox] = useState<{ source: 'capture' | 'gallery'; index: number } | null>(null)
+  const [lightbox, setLightbox] = useState<number | null>(null)
   const [simReady, setSimReady] = useState(false)
   const [hasKey, setHasKey] = useState(hasApiKey())
 
@@ -150,7 +312,7 @@ export default function EmergentWorlds() {
     return () => window.removeEventListener('bfl-key-change', onKeyChange)
   }, [])
   const [simError, setSimError] = useState<string | null>(null)
-  const [simStats, setSimStats] = useState({ resolution: 0, agentCount: 0 })
+  const [simStats, setSimStats] = useState({ resolution: 0, simWidth: 0, simHeight: 0, agentCount: 0 })
   const [fps, setFps] = useState(0)
   const lastFrameRef = useRef(0)
 
@@ -168,6 +330,9 @@ export default function EmergentWorlds() {
   // Sim params
   const [seedCount, setSeedCount] = useState(saved.seedCount ?? 1)
   const [speed, setSpeed] = useState(saved.speed ?? 1)
+  const [simWidth, setSimWidth] = useState(saved.simWidth ?? 640)
+  const [simHeight, setSimHeight] = useState(saved.simHeight ?? 640)
+  const [simDimCustom, setSimDimCustom] = useState(false) // true when text fields edited
 
   // Frame capture
   const [capturedFrames, setCapturedFrames] = useState<CapturedFrame[]>([])
@@ -175,6 +340,22 @@ export default function EmergentWorlds() {
   const [autoCapture, setAutoCapture] = useState(saved.autoCapture ?? false)
   const [paused, setPaused] = useState(false)
   const lastCaptureFrameRef = useRef(0)
+
+  // AI frames — parallel to capturedFrames
+  const [aiFrames, setAiFrames] = useState<(string | null)[]>([])
+  const [transforming, setTransforming] = useState(false)
+  const [transformMode, setTransformMode] = useState<'chained' | 'parallel'>('chained')
+  const [transformIndex, setTransformIndex] = useState(-1)
+
+  // Downsample
+  const [dsWidth, setDsWidth] = useState(saved.dsWidth ?? 512)
+  const [dsHeight, setDsHeight] = useState(saved.dsHeight ?? 512)
+
+  // Shortcuts overlay
+  const [showShortcuts, setShowShortcuts] = useState(false)
+
+  // Discard confirmation
+  const [discardConfirm, setDiscardConfirm] = useState<{ action: () => void } | null>(null)
 
   // Advanced settings
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -190,7 +371,8 @@ export default function EmergentWorlds() {
   const [promptUpsampling, setPromptUpsampling] = useState(saved.promptUpsampling ?? true)
   const [raw, setRaw] = useState(saved.raw ?? false)
   const [imagePromptStrength, setImagePromptStrength] = useState(saved.imagePromptStrength ?? 0.1)
-  const [helpHover, setHelpHover] = useState(false)
+  const [helpPos, setHelpPos] = useState<{ x: number; y: number } | null>(null)
+  const [advancedPos, setAdvancedPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -200,6 +382,7 @@ export default function EmergentWorlds() {
       stoppedR, stoppedG, stoppedB, fadeRate,
       sizeMode, width, height, aspectRatio, steps, guidance,
       outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength,
+      dsWidth, dsHeight, simWidth, simHeight,
     })
   }, [
     model, seedCount, speed, autoCapture, captureInterval,
@@ -207,6 +390,7 @@ export default function EmergentWorlds() {
     stoppedR, stoppedG, stoppedB, fadeRate,
     sizeMode, width, height, aspectRatio, steps, guidance,
     outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength,
+    dsWidth, dsHeight, simWidth, simHeight,
   ])
 
   // Reset/clamp values when model changes
@@ -223,6 +407,24 @@ export default function EmergentWorlds() {
     }
   }, [model])
 
+  // Load session from IndexedDB on mount
+  useEffect(() => {
+    loadSession().then(session => {
+      if (session) {
+        setCapturedFrames(session.capturedFrames)
+        setAiFrames(session.aiFrames)
+        setPrompt(session.prompt)
+        setModel(session.model)
+      }
+    })
+  }, [])
+
+  // Auto-save session after captures/transforms change
+  useEffect(() => {
+    if (capturedFrames.length === 0 && aiFrames.length === 0) return
+    saveSession({ capturedFrames, aiFrames, prompt, model, timestamp: Date.now() })
+  }, [capturedFrames, aiFrames, prompt, model])
+
   const captureFrame = useCallback(() => {
     if (!simRef.current) return
     const canvas = simRef.current.canvas
@@ -238,7 +440,33 @@ export default function EmergentWorlds() {
       resolution: simStats.resolution,
       agentCount: simStats.agentCount,
     }])
+    setAiFrames(prev => [...prev, null])
   }, [fps, speed, seedCount, simStats])
+
+  const hasSessionData = capturedFrames.length > 0 || aiFrames.some(f => f !== null)
+
+  const doClearAll = useCallback(() => {
+    setCapturedFrames([])
+    setAiFrames([])
+    if (transformAbortRef.current) transformAbortRef.current.abort()
+    setTransforming(false)
+    setTransformIndex(-1)
+    setStatus('')
+    clearSessionDB()
+  }, [])
+
+  const deleteFrame = useCallback((index: number) => {
+    setCapturedFrames(prev => prev.filter((_, i) => i !== index))
+    setAiFrames(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const confirmOrDo = useCallback((action: () => void) => {
+    if (hasSessionData) {
+      setDiscardConfirm({ action })
+    } else {
+      action()
+    }
+  }, [hasSessionData])
 
   const startSim = useCallback(async (config?: Partial<SimConfig>) => {
     if (!canvasRef.current) return
@@ -248,25 +476,26 @@ export default function EmergentWorlds() {
     }
     setSimReady(false)
     setFrameCount(0)
-    setCapturedFrames([])
     lastFrameRef.current = 0
     lastCaptureFrameRef.current = 0
 
     try {
       const handle = await init(canvasRef.current, {
-        resolution: 640,
+        width: config?.width ?? simWidth,
+        height: config?.height ?? simHeight,
         seedCount: config?.seedCount ?? seedCount,
         speed: config?.speed ?? speed,
       })
       simRef.current = handle
       handle.setDofParams(dofExponent, dofFocus, dofRadius, dofIterations)
       handle.setColorParams(stoppedR, stoppedG, stoppedB, fadeRate)
-      setSimStats({ resolution: handle.resolution, agentCount: handle.agentCount })
+      if (paused) pauseAfterFrameRef.current = 20
+      setSimStats({ resolution: handle.resolution, simWidth: handle.simWidth, simHeight: handle.simHeight, agentCount: handle.agentCount })
       setSimReady(true)
     } catch (err: unknown) {
       setSimError(err instanceof Error ? err.message : 'WebGPU not supported')
     }
-  }, [seedCount, speed])
+  }, [seedCount, speed, simWidth, simHeight, paused, dofExponent, dofFocus, dofRadius, dofIterations, stoppedR, stoppedG, stoppedB, fadeRate])
 
   // Init sim on mount
   useEffect(() => {
@@ -288,6 +517,13 @@ export default function EmergentWorlds() {
       lastFrameRef.current = frame
       setFrameCount(frame)
 
+      // Deferred pause after reset
+      if (pauseAfterFrameRef.current !== null && frame >= pauseAfterFrameRef.current) {
+        pauseAfterFrameRef.current = null
+        simRef.current!.setSpeed(0)
+        setPaused(true)
+      }
+
       // Auto-capture
       if (autoCapture && captureInterval > 0 && frame - lastCaptureFrameRef.current >= captureInterval) {
         lastCaptureFrameRef.current = frame
@@ -303,96 +539,397 @@ export default function EmergentWorlds() {
           resolution: simRef.current!.resolution,
           agentCount: simRef.current!.agentCount,
         }])
+        setAiFrames(prev => [...prev, null])
       }
     }, 1000)
     return () => clearInterval(interval)
   }, [simReady, captureInterval, autoCapture, speed, seedCount])
 
-  const doGenerate = useCallback(async () => {
-    if (!simRef.current || generating) return
-    setGenerating(true)
-    setStatus('Capturing...')
+  // Build generation params for a single frame
+  const buildParams = useCallback(async (
+    inputBase64: string,
+    batchSeed: number,
+    refDataUrl?: string | null,
+  ): Promise<GenerationParams> => {
+    let hasRefImage = false
+    let refBase64: string | undefined
+    if (isFlux2Model(model) && refDataUrl) {
+      try {
+        refBase64 = await urlToBase64(refDataUrl, dsWidth, dsHeight)
+        hasRefImage = true
+      } catch { /* skip */ }
+    }
+
+    const fullPrompt = prompt + buildStructureSuffix(hasRefImage)
+    const params: GenerationParams = {
+      prompt: fullPrompt,
+      model,
+      ...(isFlux2Model(model) ? { input_image: inputBase64 } : { image_prompt: inputBase64 }),
+    }
+    if (refBase64) params.input_image_2 = refBase64
+
+    if (sizeMode === 'custom') {
+      if (MODELS_WITH_DIMENSIONS.has(model)) { params.width = width; params.height = height }
+      if (MODELS_WITH_ASPECT_RATIO.has(model)) params.aspect_ratio = aspectRatio
+    }
+    if (MODELS_WITH_GUIDANCE.has(model)) { params.steps = steps; params.guidance = guidance }
+    params.seed = batchSeed
+    if (MODELS_WITH_UPSAMPLING.has(model)) params.prompt_upsampling = promptUpsampling
+    params.output_format = outputFormat
+    params.safety_tolerance = safetyTolerance
+    if (MODELS_WITH_RAW.has(model)) params.raw = raw
+    if (MODELS_WITH_IMG_STRENGTH.has(model)) params.image_prompt_strength = imagePromptStrength
+    return params
+  }, [model, prompt, dsWidth, dsHeight, sizeMode, width, height, aspectRatio, steps, guidance, outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength])
+
+  // Fetch AI image and convert to data URL
+  const fetchAsDataUrl = useCallback(async (imageUrl: string): Promise<string> => {
+    try {
+      const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`
+      const res = await fetch(proxyUrl)
+      const blob = await res.blob()
+      return await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsDataURL(blob)
+      })
+    } catch {
+      return imageUrl
+    }
+  }, [])
+
+  // Transform batch
+  const doTransform = useCallback(async () => {
+    if (transforming || capturedFrames.length === 0) return
+    if (!MODELS_WITH_IMG2IMG.has(model)) return
+
+    const abort = new AbortController()
+    transformAbortRef.current = abort
+    setTransforming(true)
+    setStatus('')
+
+    const batchSeed = seed ?? Math.floor(Math.random() * 2_147_483_647)
+    const toProcess = capturedFrames
+      .map((_, i) => i)
+      .filter(i => aiFrames[i] === null || aiFrames[i] === undefined)
+
+    if (toProcess.length === 0) { setTransforming(false); return }
 
     try {
-      const base64 = canvasToBase64(simRef.current.canvas)
-      const frame = simRef.current.getFrame()
-      const currentPrompt = prompt
-
-      const params: GenerationParams = {
-        prompt: currentPrompt,
-        model,
-        ...(isFlux2Model(model) ? { input_image: base64 } : { image_prompt: base64 }),
-      }
-
-      // Size params
-      if (sizeMode === 'custom') {
-        if (MODELS_WITH_DIMENSIONS.has(model)) {
-          params.width = width
-          params.height = height
+      if (transformMode === 'chained') {
+        // Chained: feed (n-1)th AI output as input for nth frame
+        let prevAiDataUrl: string | null = null
+        // Find the last existing AI frame before our batch starts
+        for (let j = toProcess[0] - 1; j >= 0; j--) {
+          if (aiFrames[j]) { prevAiDataUrl = aiFrames[j]; break }
         }
-        if (MODELS_WITH_ASPECT_RATIO.has(model)) {
-          params.aspect_ratio = aspectRatio
+
+        for (let k = 0; k < toProcess.length; k++) {
+          if (abort.signal.aborted) break
+          const i = toProcess[k]
+          setTransformIndex(i)
+          const statusCb = (s: string) => setStatus(`[${k + 1}/${toProcess.length}] ${s}`)
+
+          // First untransformed frame uses its sim capture; rest use previous AI output
+          const inputSrc = (prevAiDataUrl && k > 0) ? prevAiDataUrl : capturedFrames[i].dataUrl
+          const inputBase64 = await downsampleImage(inputSrc, dsWidth, dsHeight)
+          const refForPrompt = (k === 0) ? prevAiDataUrl : null
+          const params = await buildParams(inputBase64, batchSeed, refForPrompt)
+
+          const imageUrl = await generateImage(params, statusCb, abort.signal)
+          const dataUrl = await fetchAsDataUrl(imageUrl)
+
+          prevAiDataUrl = dataUrl
+          setAiFrames(prev => { const next = [...prev]; next[i] = dataUrl; return next })
         }
+      } else {
+        // Parallel: all frames use their own sim capture, fire concurrently
+        const total = toProcess.length
+        let completed = 0
+
+        const processFrame = async (i: number) => {
+          if (abort.signal.aborted) return
+          const inputBase64 = await downsampleImage(capturedFrames[i].dataUrl, dsWidth, dsHeight)
+          const params = await buildParams(inputBase64, batchSeed)
+          const statusCb = (s: string) => {
+            completed++
+            setStatus(`[${Math.min(completed, total)}/${total}] ${s}`)
+          }
+          const imageUrl = await generateImage(params, statusCb, abort.signal)
+          const dataUrl = await fetchAsDataUrl(imageUrl)
+          setAiFrames(prev => { const next = [...prev]; next[i] = dataUrl; return next })
+        }
+
+        await Promise.all(toProcess.map(i => processFrame(i)))
       }
-
-      // Generation params
-      if (MODELS_WITH_GUIDANCE.has(model)) {
-        params.steps = steps
-        params.guidance = guidance
-      }
-      if (seed !== null) params.seed = seed
-      if (MODELS_WITH_UPSAMPLING.has(model)) params.prompt_upsampling = promptUpsampling
-
-      // Output params
-      params.output_format = outputFormat
-      params.safety_tolerance = safetyTolerance
-      if (MODELS_WITH_RAW.has(model)) params.raw = raw
-      if (MODELS_WITH_IMG_STRENGTH.has(model)) params.image_prompt_strength = imagePromptStrength
-
-      const imageUrl = await generateImage(params, setStatus)
-
-      setGallery((prev) => [{
-        imageUrl,
-        prompt: currentPrompt,
-        timestamp: Date.now(),
-        simFrame: frame,
-      }, ...prev])
+      setStatus('Transform complete')
     } catch (err: unknown) {
-      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      if (abort.signal.aborted) {
+        setStatus('Transform cancelled')
+      } else {
+        setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      }
     } finally {
-      setGenerating(false)
+      setTransforming(false)
+      setTransformIndex(-1)
+      transformAbortRef.current = null
     }
-  }, [model, prompt, generating, sizeMode, width, height, aspectRatio, steps, guidance, seed, outputFormat, safetyTolerance, promptUpsampling, raw, imagePromptStrength])
+  }, [transforming, capturedFrames, aiFrames, model, seed, transformMode, dsWidth, dsHeight, buildParams, fetchAsDataUrl])
 
-  // Auto-generate toggle
-  useEffect(() => {
-    if (autoGenerate && simReady) {
-      autoIntervalRef.current = setInterval(() => {
-        if (!generating) doGenerate()
-      }, 30000)
+  // Export session
+  const doExport = useCallback(async () => {
+    if (capturedFrames.length === 0) return
+    setStatus('Exporting...')
+    try {
+      const zip = new JSZip()
+      // Captures
+      for (let i = 0; i < capturedFrames.length; i++) {
+        const cf = capturedFrames[i]
+        const b64 = cf.dataUrl.replace(/^data:image\/\w+;base64,/, '')
+        zip.file(`capture-${i}-f${cf.frame}.png`, b64, { base64: true })
+      }
+      // AI results
+      for (let i = 0; i < aiFrames.length; i++) {
+        const url = aiFrames[i]
+        if (!url) continue
+        if (url.startsWith('data:')) {
+          const match = url.match(/^data:image\/(\w+);base64,(.+)$/)
+          if (match) {
+            zip.file(`ai-${i}-f${capturedFrames[i]?.frame ?? i}.${match[1] === 'png' ? 'png' : 'jpg'}`, match[2], { base64: true })
+          }
+        } else {
+          try {
+            const fetchUrl = url.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(url)}` : url
+            const res = await fetch(fetchUrl)
+            const blob = await res.blob()
+            zip.file(`ai-${i}-f${capturedFrames[i]?.frame ?? i}.${blob.type.includes('png') ? 'png' : 'jpg'}`, blob)
+          } catch { /* skip */ }
+        }
+      }
+      // Metadata + settings
+      const raw_settings = localStorage.getItem(STORAGE_KEY)
+      zip.file('session.json', JSON.stringify({
+        prompt,
+        model,
+        dsWidth,
+        dsHeight,
+        timestamp: Date.now(),
+        settings: raw_settings ? JSON.parse(raw_settings) : {},
+        frames: capturedFrames.map((cf, i) => ({
+          index: i,
+          frame: cf.frame,
+          timestamp: cf.timestamp,
+          fps: cf.fps,
+          speed: cf.speed,
+          seedCount: cf.seedCount,
+          resolution: cf.resolution,
+          agentCount: cf.agentCount,
+          hasAi: aiFrames[i] !== null,
+        })),
+      }, null, 2))
+
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `ew-export-${Date.now()}.zip`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      setStatus('Export complete')
+    } catch (err: unknown) {
+      setStatus(`Export error: ${err instanceof Error ? err.message : String(err)}`)
     }
-    return () => {
-      if (autoIntervalRef.current) {
-        clearInterval(autoIntervalRef.current)
-        autoIntervalRef.current = null
+  }, [capturedFrames, aiFrames, prompt, model, dsWidth, dsHeight])
+
+  // Import session from zip
+  const doImport = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.zip'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      setStatus('Importing...')
+      try {
+        const zip = await JSZip.loadAsync(file)
+        const sessionFile = zip.file('session.json')
+        if (!sessionFile) { setStatus('Invalid archive: no session.json'); return }
+        const session = JSON.parse(await sessionFile.async('text'))
+
+        // Restore settings
+        if (session.settings) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(session.settings))
+          // Apply key settings to state
+          const s = session.settings as Partial<PersistedSettings>
+          if (s.model) setModel(s.model)
+          if (s.dsWidth) setDsWidth(s.dsWidth)
+          if (s.dsHeight) setDsHeight(s.dsHeight)
+          if (s.seedCount) setSeedCount(s.seedCount)
+          if (s.speed) setSpeed(s.speed)
+        }
+        if (session.prompt) setPrompt(session.prompt)
+        if (session.model) setModel(session.model as ModelValue)
+
+        // Restore frames
+        const frames: CapturedFrame[] = []
+        const ai: (string | null)[] = []
+        const frameMeta: { index: number; frame: number; timestamp: number; fps: number; speed: number; seedCount: number; resolution: number; agentCount: number; hasAi: boolean }[] = session.frames ?? []
+
+        for (const meta of frameMeta) {
+          // Load capture image
+          const capFile = zip.file(new RegExp(`^capture-${meta.index}-`))?.[0]
+          if (!capFile) continue
+          const capBlob = await capFile.async('blob')
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.readAsDataURL(capBlob)
+          })
+          frames.push({
+            dataUrl,
+            frame: meta.frame,
+            timestamp: meta.timestamp ?? Date.now(),
+            fps: meta.fps ?? 0,
+            speed: meta.speed ?? 1,
+            seedCount: meta.seedCount ?? 1,
+            resolution: meta.resolution ?? 0,
+            agentCount: meta.agentCount ?? 0,
+          })
+
+          // Load AI image if present
+          if (meta.hasAi) {
+            const aiFile = zip.file(new RegExp(`^ai-${meta.index}-`))?.[0]
+            if (aiFile) {
+              const aiBlob = await aiFile.async('blob')
+              ai.push(URL.createObjectURL(aiBlob))
+            } else {
+              ai.push(null)
+            }
+          } else {
+            ai.push(null)
+          }
+        }
+
+        setCapturedFrames(frames)
+        setAiFrames(ai)
+        setStatus(`Imported ${frames.length} frames`)
+      } catch (err: unknown) {
+        setStatus(`Import error: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
-  }, [autoGenerate, simReady, doGenerate, generating])
+    input.click()
+  }, [])
+
+  useImperativeHandle(ref, () => ({ doExport, doImport }), [doExport, doImport])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (lightbox !== null || discardConfirm) return
+
+      if (e.key === '\\') { setShowShortcuts(true); return }
+
+      if (e.key === ' ') {
+        e.preventDefault()
+        const next = !paused
+        setPaused(next)
+        if (simRef.current) simRef.current.setSpeed(next ? 0 : speed)
+        flashButton('pause')
+        return
+      }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        const idx = SPEED_OPTIONS.indexOf(speed)
+        const nextIdx = e.key === 'ArrowUp'
+          ? Math.max(0, idx - 1)           // toward higher speeds (lower index)
+          : Math.min(SPEED_OPTIONS.length - 1, idx + 1) // toward lower speeds
+        if (nextIdx !== idx) {
+          const v = SPEED_OPTIONS[nextIdx]
+          setSpeed(v)
+          if (simRef.current) simRef.current.setSpeed(paused ? 0 : v)
+        }
+        flashButton('speed')
+        return
+      }
+      if (e.key.toLowerCase() === 'c') { flashButton('capture'); captureFrame(); return }
+      if (e.key.toLowerCase() === 't') { flashButton('transform'); doTransform(); return }
+      if (e.key.toLowerCase() === 'r') {
+        flashButton('reset')
+        confirmOrDo(() => { startSim(); doClearAll() })
+        return
+      }
+      if (e.key.toLowerCase() === 'x') {
+        flashButton('clear')
+        confirmOrDo(doClearAll)
+        return
+      }
+      if (e.key.toLowerCase() === 'e') { flashButton('export'); doExport(); return }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === '\\') setShowShortcuts(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [paused, speed, lightbox, discardConfirm, captureFrame, doTransform, startSim, doClearAll, confirmOrDo, doExport])
 
   // Lightbox keyboard navigation
   useEffect(() => {
-    if (!lightbox) return
-    const items = lightbox.source === 'capture' ? capturedFrames : gallery
+    if (lightbox === null) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightbox(null)
-      if (e.key === 'ArrowLeft' && lightbox.index > 0)
-        setLightbox({ ...lightbox, index: lightbox.index - 1 })
-      if (e.key === 'ArrowRight' && lightbox.index < items.length - 1)
-        setLightbox({ ...lightbox, index: lightbox.index + 1 })
+      if (e.key === 'ArrowLeft' && lightbox > 0)
+        setLightbox(lightbox - 1)
+      if (e.key === 'ArrowRight' && lightbox < capturedFrames.length - 1)
+        setLightbox(lightbox + 1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox, capturedFrames, gallery])
+  }, [lightbox, capturedFrames.length])
+
+  // Close visual panel on outside click
+  useEffect(() => {
+    if (!visualOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (visualRef.current && !visualRef.current.contains(e.target as Node)) {
+        setVisualOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [visualOpen])
+
+  // Close advanced panel on outside click
+  useEffect(() => {
+    if (!advancedOpen) return
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (advancedRef.current?.contains(target)) return
+      if (advancedToggleRef.current?.contains(target)) return
+      setAdvancedOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [advancedOpen])
+
+  // Scroll sync between strips
+  const syncScroll = useCallback((source: 'capture' | 'ai') => {
+    if (scrollingRef.current) return
+    scrollingRef.current = true
+    const from = source === 'capture' ? captureStripRef.current : aiStripRef.current
+    const to = source === 'capture' ? aiStripRef.current : captureStripRef.current
+    if (from && to) to.scrollLeft = from.scrollLeft
+    requestAnimationFrame(() => { scrollingRef.current = false })
+  }, [])
+
+  const modelHasImg2Img = MODELS_WITH_IMG2IMG.has(model)
+  const untransformedCount = aiFrames.filter((f, i) => (f === null || f === undefined) && i < capturedFrames.length).length
+  const transformedCount = aiFrames.filter(f => f !== null).length
+  const costInfo = calcCost(model, dsWidth, dsHeight, Math.max(untransformedCount, 1))
 
   const groupLabelStyle = {
     fontFamily: 'var(--font-mono)',
@@ -415,15 +952,16 @@ export default function EmergentWorlds() {
   }
 
   return (
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-      {/* Left: Sim */}
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      {/* Top: Sim */}
       <div style={{
-        flex: '0 0 50%',
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         padding: '1rem',
         background: '#050505',
         minWidth: 0,
+        minHeight: 0,
         overflow: 'hidden',
       }}>
         {/* Sim controls */}
@@ -436,40 +974,72 @@ export default function EmergentWorlds() {
           fontFamily: 'var(--font-mono)',
           fontSize: '0.75rem',
         }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => startSim()}
-            disabled={!simReady && !simError}
-            style={{ padding: '0.35rem 0.8rem', fontSize: '0.75rem' }}
-          >
-            Reset
-          </button>
+          {/* Dims . Seeds . Reset */}
+          <label style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            Dim
+            <select
+              value={!simDimCustom && simWidth === simHeight ? simWidth : ''}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setSimWidth(v)
+                setSimHeight(v)
+                setSimDimCustom(false)
+                e.target.blur()
+              }}
+              style={{
+                width: 64, padding: '0.2rem 0.3rem', fontSize: '0.75rem',
+                opacity: simDimCustom ? 0.35 : 1,
+                transition: 'opacity 0.15s',
+              }}
+            >
+              {simDimCustom && <option value="">—</option>}
+              {[256, 384, 512, 640, 768, 1024, 1280].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={simWidth}
+              onChange={(e) => { setSimWidth(Number(e.target.value.replace(/\D/g, '')) || 0); setSimDimCustom(true) }}
+              onBlur={(e) => { setSimWidth(v => Math.max(128, Math.min(2048, v))); e.target.blur() }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLElement).blur() }}
+              style={{ width: 52, padding: '0.15rem 0.3rem', fontSize: '0.7rem', textAlign: 'center' }}
+            />
+            <span style={{ opacity: 0.35 }}>&times;</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={simHeight}
+              onChange={(e) => { setSimHeight(Number(e.target.value.replace(/\D/g, '')) || 0); setSimDimCustom(true) }}
+              onBlur={(e) => { setSimHeight(v => Math.max(128, Math.min(2048, v))); e.target.blur() }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLElement).blur() }}
+              style={{ width: 52, padding: '0.15rem 0.3rem', fontSize: '0.7rem', textAlign: 'center' }}
+            />
+          </label>
           <label style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
             Seeds
             <select
               value={seedCount}
-              onChange={(e) => { const v = Number(e.target.value); setSeedCount(v); startSim({ seedCount: v }) }}
+              onChange={(e) => { setSeedCount(Number(e.target.value)); e.target.blur() }}
               style={{ width: 52, padding: '0.2rem 0.3rem', fontSize: '0.75rem' }}
             >
               {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          <label style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            Speed
-            <select
-              value={speed}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                setSpeed(v)
-                if (simRef.current) simRef.current.setSpeed(paused ? 0 : v)
-              }}
-              style={{ width: 60, padding: '0.2rem 0.3rem', fontSize: '0.75rem' }}
-            >
-              {[0.1, 0.25, 0.5, 0.75, 1, 2, 3, 5, 8].map(n => <option key={n} value={n}>{n}x</option>)}
-            </select>
-          </label>
           <button
             className="btn btn-secondary"
+            data-shortcut="reset"
+            onClick={() => confirmOrDo(() => { startSim(); doClearAll() })}
+            disabled={!simReady && !simError}
+            style={{ padding: '0.35rem 0.8rem', fontSize: '0.75rem', transition: 'all 0.15s' }}
+          >
+            Reset
+          </button>
+          {/* divider */}
+          <span style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+          {/* Play/Pause . Speed . Visuals */}
+          <button
+            className="btn btn-secondary"
+            data-shortcut="pause"
             onClick={() => {
               const next = !paused
               setPaused(next)
@@ -481,110 +1051,130 @@ export default function EmergentWorlds() {
               fontSize: '0.75rem',
               color: paused ? '#f59e0b' : undefined,
               borderColor: paused ? '#f59e0b' : undefined,
+              transition: 'all 0.15s',
             }}
           >
             {paused ? 'Play' : 'Pause'}
           </button>
-        </div>
-
-        {/* Visual controls — collapsible */}
-        <div style={{ flexShrink: 0, marginBottom: '0.5rem' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              cursor: 'pointer',
-              userSelect: 'none',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.7rem',
-              color: 'var(--text-muted)',
-              marginBottom: visualOpen ? '0.5rem' : 0,
-            }}
-            onClick={() => setVisualOpen(!visualOpen)}
-          >
-            <span style={{
-              fontSize: '0.7rem',
-              transition: 'transform 0.2s',
-              transform: visualOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-              display: 'inline-block',
-            }}>&#9662;</span>
-            VISUAL
+          <label style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            Speed
+            <select
+              value={speed}
+              data-shortcut="speed"
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setSpeed(v)
+                if (simRef.current) simRef.current.setSpeed(paused ? 0 : v)
+                e.target.blur()
+              }}
+              style={{ width: 68, padding: '0.2rem 0.3rem', fontSize: '0.75rem', transition: 'all 0.15s' }}
+            >
+              {SPEED_OPTIONS.map(n => <option key={n} value={n}>{n}x</option>)}
+            </select>
+          </label>
+          <div ref={visualRef} style={{ position: 'relative' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setVisualOpen(!visualOpen)}
+              style={{
+                padding: '0.35rem 0.8rem',
+                fontSize: '0.75rem',
+                transition: 'all 0.15s',
+                color: visualOpen ? 'var(--accent)' : undefined,
+                borderColor: visualOpen ? 'var(--accent)' : undefined,
+              }}
+            >
+              Visual
+              <span style={{
+                fontSize: '0.6rem',
+                marginLeft: '0.15rem',
+                transition: 'transform 0.2s',
+                transform: visualOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                display: 'inline-block',
+              }}>&#9662;</span>
+            </button>
+            {visualOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: 6,
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '0.75rem',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '0.75rem',
+                fontSize: '0.7rem',
+                fontFamily: 'var(--font-mono)',
+                zIndex: 40,
+                width: 340,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}>
+                {/* Column 1: DOF */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.6rem' }}>Depth of Field</span>
+                  {([
+                    { label: 'Exp', value: dofExponent, set: setDofExponent, min: 0.1, max: 3.0, step: 0.05 },
+                    { label: 'Focus', value: dofFocus, set: setDofFocus, min: 0.0, max: 3.0, step: 0.05 },
+                    { label: 'Radius', value: dofRadius, set: setDofRadius, min: 0.0, max: 3.0, step: 0.05 },
+                    { label: 'Iter', value: dofIterations, set: setDofIterations, min: 1, max: 60, step: 1 },
+                  ] as const).map(s => (
+                    <div key={s.label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                        <span>{s.label}</span>
+                        <span>{s.step < 1 ? s.value.toFixed(2) : s.value}</span>
+                      </div>
+                      <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
+                        onChange={e => {
+                          const v = Number(e.target.value)
+                          s.set(v)
+                          if (simRef.current) simRef.current.setDofParams(
+                            s.label === 'Exp' ? v : dofExponent,
+                            s.label === 'Focus' ? v : dofFocus,
+                            s.label === 'Radius' ? v : dofRadius,
+                            s.label === 'Iter' ? v : dofIterations,
+                          )
+                        }}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {/* Column 2: Color */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.6rem' }}>Color</span>
+                  {([
+                    { label: 'R', value: stoppedR, set: setStoppedR, min: 0, max: 2, step: 0.01 },
+                    { label: 'G', value: stoppedG, set: setStoppedG, min: 0, max: 2, step: 0.01 },
+                    { label: 'B', value: stoppedB, set: setStoppedB, min: 0, max: 2, step: 0.01 },
+                    { label: 'Fade', value: fadeRate, set: setFadeRate, min: 0.01, max: 1.0, step: 0.01 },
+                  ] as const).map(s => (
+                    <div key={s.label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                        <span>{s.label}</span>
+                        <span>{s.value.toFixed(2)}</span>
+                      </div>
+                      <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
+                        onChange={e => {
+                          const v = Number(e.target.value)
+                          s.set(v)
+                          if (simRef.current) simRef.current.setColorParams(
+                            s.label === 'R' ? v : stoppedR,
+                            s.label === 'G' ? v : stoppedG,
+                            s.label === 'B' ? v : stoppedB,
+                            s.label === 'Fade' ? v : fadeRate,
+                          )
+                        }}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          {visualOpen && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '0.75rem',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '0.6rem',
-              fontSize: '0.7rem',
-              fontFamily: 'var(--font-mono)',
-            }}>
-              {/* Column 1: DOF */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.6rem' }}>Depth of Field</span>
-                {([
-                  { label: 'Exp', value: dofExponent, set: setDofExponent, min: 0.1, max: 3.0, step: 0.05 },
-                  { label: 'Focus', value: dofFocus, set: setDofFocus, min: 0.0, max: 3.0, step: 0.05 },
-                  { label: 'Radius', value: dofRadius, set: setDofRadius, min: 0.0, max: 3.0, step: 0.05 },
-                  { label: 'Iter', value: dofIterations, set: setDofIterations, min: 1, max: 60, step: 1 },
-                ] as const).map(s => (
-                  <div key={s.label}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                      <span>{s.label}</span>
-                      <span>{s.step < 1 ? s.value.toFixed(2) : s.value}</span>
-                    </div>
-                    <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
-                      onChange={e => {
-                        const v = Number(e.target.value)
-                        s.set(v)
-                        if (simRef.current) simRef.current.setDofParams(
-                          s.label === 'Exp' ? v : dofExponent,
-                          s.label === 'Focus' ? v : dofFocus,
-                          s.label === 'Radius' ? v : dofRadius,
-                          s.label === 'Iter' ? v : dofIterations,
-                        )
-                      }}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                ))}
-              </div>
-              {/* Column 2: Color */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.6rem' }}>Color</span>
-                {([
-                  { label: 'R', value: stoppedR, set: setStoppedR, min: 0, max: 2, step: 0.01 },
-                  { label: 'G', value: stoppedG, set: setStoppedG, min: 0, max: 2, step: 0.01 },
-                  { label: 'B', value: stoppedB, set: setStoppedB, min: 0, max: 2, step: 0.01 },
-                  { label: 'Fade', value: fadeRate, set: setFadeRate, min: 0.01, max: 1.0, step: 0.01 },
-                ] as const).map(s => (
-                  <div key={s.label}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                      <span>{s.label}</span>
-                      <span>{s.value.toFixed(2)}</span>
-                    </div>
-                    <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
-                      onChange={e => {
-                        const v = Number(e.target.value)
-                        s.set(v)
-                        if (simRef.current) simRef.current.setColorParams(
-                          s.label === 'R' ? v : stoppedR,
-                          s.label === 'G' ? v : stoppedG,
-                          s.label === 'B' ? v : stoppedB,
-                          s.label === 'Fade' ? v : fadeRate,
-                        )
-                      }}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Canvas + Stats */}
@@ -606,7 +1196,7 @@ export default function EmergentWorlds() {
                 ref={canvasRef}
                 style={{
                   maxWidth: '100%',
-                  maxHeight: 'calc(100vh - 140px)',
+                  maxHeight: '100%',
                   border: '1px solid var(--border)',
                   borderRadius: '4px',
                 }}
@@ -619,7 +1209,7 @@ export default function EmergentWorlds() {
                 color: 'var(--text-muted)',
               }}>
                 {paused && <><span style={{ color: '#f59e0b' }}>PAUSED</span><span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span></>}
-                {simStats.resolution}x{simStats.resolution}
+                {simStats.simWidth}x{simStats.simHeight}
                 <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
                 f.{frameCount}
                 <span style={{ opacity: 0.35, margin: '0 0.4rem' }}>|</span>
@@ -631,7 +1221,7 @@ export default function EmergentWorlds() {
           )}
         </div>
 
-        {/* Frame Capture Strip */}
+        {/* Capture Timeline */}
         <div style={{
           flexShrink: 0,
           marginTop: '0.6rem',
@@ -650,6 +1240,9 @@ export default function EmergentWorlds() {
             flexWrap: 'wrap',
           }}>
             <span>Captures ({capturedFrames.length})</span>
+            {transformedCount > 0 && (
+              <span style={{ color: 'var(--accent)', fontSize: '0.6rem' }}>AI {transformedCount}/{capturedFrames.length}</span>
+            )}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -706,186 +1299,346 @@ export default function EmergentWorlds() {
             )}
             <button
               className="btn btn-secondary"
+              data-shortcut="capture"
               onClick={captureFrame}
               disabled={!simReady}
-              style={{ padding: '0.2rem 0.6rem', fontSize: '0.65rem' }}
+              style={{ padding: '0.2rem 0.6rem', fontSize: '0.65rem', transition: 'all 0.15s' }}
             >
               Capture
             </button>
             {capturedFrames.length > 0 && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => setCapturedFrames([])}
-                style={{ padding: '0.2rem 0.6rem', fontSize: '0.65rem', marginLeft: 'auto' }}
-              >
-                Clear
-              </button>
+              <>
+                <button
+                  className="btn btn-secondary"
+                  data-shortcut="export"
+                  onClick={doExport}
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.65rem', transition: 'all 0.15s' }}
+                >
+                  Export
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  data-shortcut="clear"
+                  onClick={() => confirmOrDo(doClearAll)}
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.65rem', marginLeft: 'auto', transition: 'all 0.15s' }}
+                >
+                  Clear
+                </button>
+              </>
             )}
           </div>
-          {capturedFrames.length > 0 && (
-            <div style={{
+          {/* Sim capture strip — always visible with empty slots */}
+          <div
+            ref={captureStripRef}
+            onScroll={() => syncScroll('capture')}
+            style={{
               display: 'flex',
               gap: '0.35rem',
               overflowX: 'auto',
-              paddingBottom: '0.3rem',
+              paddingBottom: '0.15rem',
               minWidth: 0,
-            }}>
-              {capturedFrames.map((cf, i) => (
+              minHeight: 56,
+            }}
+          >
+            {capturedFrames.length === 0 ? (
+              // Empty placeholder slots
+              Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} style={{
                   flexShrink: 0,
-                  width: 72,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 3,
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  opacity: 0.25,
+                }} />
+              ))
+            ) : (
+              capturedFrames.map((cf, i) => (
+                <div key={i} className="frame-thumb" style={{
+                  flexShrink: 0,
+                  width: 56,
+                  height: 56,
+                  position: 'relative',
                   cursor: 'pointer',
-                }} onClick={() => setLightbox({ source: 'capture', index: i })}>
+                  borderRadius: 3,
+                  border: '1px solid var(--border)',
+                  overflow: 'hidden',
+                }} onClick={() => setLightbox(i)}>
+                  <button
+                    className="frame-delete"
+                    onClick={(e) => { e.stopPropagation(); deleteFrame(i) }}
+                  >
+                    &times;
+                  </button>
                   <img
                     src={cf.dataUrl}
                     alt={`f.${cf.frame}`}
                     style={{
-                      width: 72,
-                      height: 72,
+                      width: '100%',
+                      height: '100%',
                       objectFit: 'cover',
-                      borderRadius: 3,
-                      border: '1px solid var(--border)',
+                      display: 'block',
                     }}
                   />
-                  <div style={{
+                  <span style={{
+                    position: 'absolute',
+                    bottom: 2,
+                    left: 3,
                     fontFamily: 'var(--font-mono)',
-                    fontSize: '0.55rem',
-                    color: 'var(--text-muted)',
-                    textAlign: 'center',
-                    marginTop: 2,
-                    lineHeight: 1.2,
+                    fontSize: '0.45rem',
+                    color: '#fff',
+                    textShadow: '0 0 3px rgba(0,0,0,0.9)',
+                    lineHeight: 1,
                   }}>
-                    f.{cf.frame}
-                  </div>
+                    {cf.frame}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
+          {/* AI strip — always visible with empty slots */}
+          <div
+            ref={aiStripRef}
+            onScroll={() => syncScroll('ai')}
+            style={{
+              display: 'flex',
+              gap: '0.35rem',
+              overflowX: 'auto',
+              paddingBottom: '0.3rem',
+              marginTop: '0.2rem',
+              minWidth: 0,
+              minHeight: 56,
+            }}
+          >
+            {capturedFrames.length === 0 ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} style={{
+                  flexShrink: 0,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 3,
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  opacity: 0.15,
+                }} />
+              ))
+            ) : (
+              capturedFrames.map((cf, i) => {
+                const aiUrl = aiFrames[i]
+                const isCurrentlyGenerating = transforming && transformIndex === i
+                return (
+                  <div key={i} style={{
+                    flexShrink: 0,
+                    width: 56,
+                    height: 56,
+                    position: 'relative',
+                    borderRadius: 3,
+                    border: `1px solid ${aiUrl ? 'var(--accent)' : 'var(--border)'}`,
+                    overflow: 'hidden',
+                    background: aiUrl ? 'transparent' : 'var(--bg-surface)',
+                  }}>
+                    {aiUrl ? (
+                      <img
+                        src={aiUrl}
+                        alt={`ai-f.${cf.frame}`}
+                        onClick={() => setLightbox(i)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          cursor: 'pointer',
+                          display: 'block',
+                          animation: 'fadeScaleIn 0.35s var(--transition-spring)',
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.55rem',
+                        fontFamily: 'var(--font-mono)',
+                        color: 'var(--text-muted)',
+                        opacity: 0.4,
+                      }}>
+                        {isCurrentlyGenerating ? (
+                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
+                        ) : null}
+                      </div>
+                    )}
+                    <span style={{
+                      position: 'absolute',
+                      bottom: 2,
+                      left: 3,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.45rem',
+                      color: aiUrl ? '#fff' : 'var(--text-muted)',
+                      textShadow: aiUrl ? '0 0 3px rgba(0,0,0,0.9)' : 'none',
+                      lineHeight: 1,
+                      opacity: aiUrl ? 1 : 0.4,
+                    }}>
+                      {cf.frame}
+                    </span>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Right: Model + Gallery */}
+      {/* Bottom: AI Controls + Prompt */}
       <div style={{
-        flex: '0 0 50%',
-        overflow: 'auto',
-        padding: '1.5rem',
-        borderLeft: '1px solid var(--border)',
+        flex: '0 0 auto',
+        borderTop: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        maxHeight: '50vh',
       }}>
-        {/* Model + Advanced Settings */}
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
-          <div className="control-group" style={{ flex: 1, marginBottom: 0 }}>
-            <label className="control-label">Model</label>
-            <select value={model} onChange={(e) => setModel(e.target.value as ModelValue)}>
-              {MODELS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
 
-          <div style={{ flex: 1, paddingTop: '1.15rem', position: 'relative' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                cursor: 'pointer',
-                userSelect: 'none',
-                height: '2.12rem',
-              }}
-              onClick={() => setAdvancedOpen(!advancedOpen)}
-            >
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: 'var(--text-muted)',
-              }}>
-                Advanced Settings
-              </span>
-              <span style={{
-                color: 'var(--text-muted)',
-                fontSize: '0.8rem',
-                transition: 'transform 0.2s',
-                transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                display: 'inline-block',
-              }}>
-                &#9662;
-              </span>
-              <span
-                style={{
-                  position: 'relative',
-                  marginLeft: '0.25rem',
-                  color: 'var(--text-muted)',
-                  fontSize: '0.75rem',
-                  fontFamily: 'var(--font-mono)',
+        {/* AI controls bar above prompt */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          padding: '0.5rem 1rem',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.7rem',
+          flexWrap: 'wrap',
+        }}>
+          {/* Model dropdown — compact */}
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value as ModelValue)}
+            style={{ padding: '0.15rem 0.2rem', fontSize: '0.65rem', maxWidth: 100 }}
+          >
+            {MODELS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+
+          {/* Style preset */}
+          <select
+            value={stylePreset}
+            onChange={(e) => {
+              const name = e.target.value
+              setStylePreset(name)
+              if (name) {
+                const preset = stylePresets.find(p => p.name === name)
+                if (preset) setPrompt(preset.promptPrefix)
+              } else {
+                setPrompt(DEFAULT_PROMPT)
+              }
+              e.target.blur()
+            }}
+            style={{ padding: '0.15rem 0.2rem', fontSize: '0.65rem', maxWidth: 130 }}
+          >
+            <option value="">Default style</option>
+            {stylePresets.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+          </select>
+
+          {/* Advanced Settings toggle + ? */}
+          <div
+            ref={advancedToggleRef}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              cursor: 'pointer',
+              userSelect: 'none',
+              color: advancedOpen ? 'var(--accent)' : 'var(--text-muted)',
+              transition: 'color 0.15s',
+            }}
+            onClick={(e) => {
+              if (!advancedOpen) setAdvancedPos({ x: e.clientX, y: e.clientY })
+              setAdvancedOpen(!advancedOpen)
+            }}
+          >
+            <span style={{ fontSize: '0.65rem' }}>Advanced</span>
+            <span style={{
+              fontSize: '0.55rem',
+              transition: 'transform 0.2s',
+              transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              display: 'inline-block',
+            }}>&#9662;</span>
+          </div>
+          <span
+            style={{
+              color: 'var(--text-muted)',
+              fontSize: '0.55rem',
+              fontFamily: 'var(--font-mono)',
+              border: '1px solid var(--border)',
+              borderRadius: '50%',
+              width: 14,
+              height: 14,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'help',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => setHelpPos({ x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHelpPos(null)}
+          >
+            ?
+              {helpPos && createPortal(
+                <div style={{
+                  position: 'fixed',
+                  top: Math.max(8, helpPos.y - 8),
+                  left: helpPos.x + 12,
+                  transform: 'translateY(-100%)',
+                  background: 'var(--bg-card)',
                   border: '1px solid var(--border)',
-                  borderRadius: '50%',
-                  width: 18,
-                  height: 18,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'help',
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onMouseEnter={() => setHelpHover(true)}
-                onMouseLeave={() => setHelpHover(false)}
-              >
-                ?
-                {helpHover && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    marginTop: 6,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    padding: '0.75rem',
-                    zIndex: 50,
-                    maxWidth: 'min(500px, calc(100vw - 3rem))',
-                    fontSize: '0.7rem',
-                    fontFamily: 'var(--font-mono)',
-                    overflowX: 'auto' as const,
-                  }}>
-                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: 'left', padding: '2px 6px', color: 'var(--text-muted)' }}>Param</th>
+                  borderRadius: 8,
+                  padding: '0.75rem',
+                  zIndex: 50,
+                  maxWidth: 'min(500px, calc(100vw - 3rem))',
+                  fontSize: '0.7rem',
+                  fontFamily: 'var(--font-mono)',
+                  overflowX: 'auto' as const,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                  pointerEvents: 'none',
+                }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '2px 6px', color: 'var(--text-muted)' }}>Param</th>
+                        {MODEL_COLUMNS.map(m => (
+                          <th key={m} style={{ padding: '2px 6px', color: 'var(--accent)', textAlign: 'center' }}>{m}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {PARAM_MATRIX.map(row => (
+                        <tr key={row.param}>
+                          <td style={{ padding: '2px 6px', color: 'var(--text-muted)' }}>{row.param}</td>
                           {MODEL_COLUMNS.map(m => (
-                            <th key={m} style={{ padding: '2px 6px', color: 'var(--accent)', textAlign: 'center' }}>{m}</th>
+                            <td key={m} style={{
+                              padding: '2px 6px',
+                              textAlign: 'center',
+                              color: row.models[m] ? '#4ade80' : 'var(--text-muted)',
+                            }}>
+                              {row.models[m] ? '\u2713' : '\u2014'}
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {PARAM_MATRIX.map(row => (
-                          <tr key={row.param}>
-                            <td style={{ padding: '2px 6px', color: 'var(--text-muted)' }}>{row.param}</td>
-                            {MODEL_COLUMNS.map(m => (
-                              <td key={m} style={{
-                                padding: '2px 6px',
-                                textAlign: 'center',
-                                color: row.models[m] ? '#4ade80' : 'var(--text-muted)',
-                              }}>
-                                {row.models[m] ? '\u2713' : '\u2014'}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </span>
-            </div>
-            {advancedOpen && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
+                      ))}
+                    </tbody>
+                  </table>
+                </div>,
+                document.body
+              )}
+            </span>
+            {advancedOpen && createPortal(
+              <div ref={advancedRef} style={{
+                position: 'fixed',
+                top: Math.max(8, advancedPos.y - 8),
+                left: advancedPos.x + 12,
+                transform: 'translateY(-100%)',
                 width: 300,
-                marginTop: 6,
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border)',
                 borderRadius: 8,
@@ -894,7 +1647,7 @@ export default function EmergentWorlds() {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '0.75rem',
-                maxHeight: 'calc(100vh - 200px)',
+                maxHeight: 'calc(100vh - 16px)',
                 overflowY: 'auto' as const,
                 boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
               }}>
@@ -1034,31 +1787,97 @@ export default function EmergentWorlds() {
                     )}
                   </div>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
-          </div>
-        </div>
 
-        {/* Prompt */}
-        <div className="control-group">
-          <label className="control-label">Prompt</label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={3}
-          />
-        </div>
+          {/* Divider */}
+          <span style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
 
-        {/* Generate controls */}
-        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* Downsample */}
+          <Tip text="Downsample captures before sending to FLUX. Smaller = cheaper + faster." />
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>DS</span>
+          <select
+            value={dsWidth}
+            onChange={(e) => setDsWidth(Number(e.target.value))}
+            style={{ width: 64, padding: '0.2rem 0.25rem', fontSize: '0.7rem' }}
+          >
+            {DOWNSAMPLE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>&times;</span>
+          <select
+            value={dsHeight}
+            onChange={(e) => setDsHeight(Number(e.target.value))}
+            style={{ width: 64, padding: '0.2rem 0.25rem', fontSize: '0.7rem' }}
+          >
+            {DOWNSAMPLE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+            {((dsWidth * dsHeight) / 1_000_000).toFixed(2)}MP
+          </span>
+
+          {/* Divider */}
+          <span style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
+
+          {/* Size (output) */}
+          {MODELS_WITH_DIMENSIONS.has(model) && sizeMode === 'custom' && (
+            <>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>Out</span>
+              <input type="number" value={width} onChange={(e) => setWidth(Number(e.target.value))} style={{ width: 52, padding: '0.15rem 0.25rem', fontSize: '0.7rem', textAlign: 'center' }} min={256} max={1440} step={32} />
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>&times;</span>
+              <input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))} style={{ width: 52, padding: '0.15rem 0.25rem', fontSize: '0.7rem', textAlign: 'center' }} min={256} max={1440} step={32} />
+            </>
+          )}
+          {MODELS_WITH_ASPECT_RATIO.has(model) && sizeMode === 'custom' && (
+            <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} style={{ padding: '0.2rem 0.25rem', fontSize: '0.7rem' }}>
+              {ASPECT_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
+
+          {/* Cost */}
+          {costInfo && capturedFrames.length > 0 && (
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }} title={costInfo.breakdown}>
+              ${costInfo.cost.toFixed(3)}
+            </span>
+          )}
+
+          {/* Spacer */}
+          <span style={{ flex: 1 }} />
+
+          {/* Status */}
+          {transforming && <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} />}
+          {transforming && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{status}</span>}
+          {!transforming && status && !status.startsWith('Done') && status !== 'Transform complete' && status !== 'Export complete' && (
+            <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{status}</span>
+          )}
+
+          {/* Cancel */}
+          {transforming && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => { if (transformAbortRef.current) transformAbortRef.current.abort() }}
+              style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
+            >
+              Cancel
+            </button>
+          )}
+
+          {/* Transform button */}
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <button
               className="btn btn-primary"
-              onClick={doGenerate}
-              disabled={generating || !simReady || !hasKey}
+              data-shortcut="transform"
+              onClick={doTransform}
+              disabled={transforming || !hasKey || capturedFrames.length === 0 || !modelHasImg2Img || untransformedCount === 0}
+              style={{ padding: '0.3rem 0.8rem', fontSize: '0.75rem', transition: 'all 0.15s' }}
             >
-              {generating ? <><span className="spinner" /> {status}</> : 'Generate Now'}
+              {transforming ? (
+                <><span className="spinner" style={{ width: 14, height: 14 }} /> Transforming...</>
+              ) : (
+                <>Transform{untransformedCount > 0 ? ` (${untransformedCount})` : ''}</>
+              )}
             </button>
+            <Tip text={STRUCTURE_SUFFIX_TIP} align="top-left" />
             {!hasKey && (
               <div style={{
                 position: 'absolute',
@@ -1070,7 +1889,7 @@ export default function EmergentWorlds() {
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '0.3rem 0.6rem',
-                fontSize: '0.7rem',
+                fontSize: '0.65rem',
                 fontFamily: 'var(--font-mono)',
                 color: 'var(--text-secondary)',
                 whiteSpace: 'nowrap',
@@ -1079,65 +1898,91 @@ export default function EmergentWorlds() {
             )}
           </div>
 
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={autoGenerate}
-              onChange={(e) => setAutoGenerate(e.target.checked)}
-              disabled={!simReady || !hasKey}
-            />
-            Auto-generate (30s)
-          </label>
+          {/* Chained / Parallel toggle */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.15rem',
+            background: 'var(--bg-surface)',
+            borderRadius: 4,
+            padding: '1px 2px',
+            border: '1px solid var(--border)',
+          }}>
+            {(['chained', 'parallel'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setTransformMode(m)}
+                disabled={transforming}
+                style={{
+                  background: transformMode === m ? 'var(--accent)' : 'transparent',
+                  color: transformMode === m ? '#fff' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: 3,
+                  padding: '2px 6px',
+                  fontSize: '0.55rem',
+                  cursor: transforming ? 'default' : 'pointer',
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'capitalize',
+                  opacity: transforming ? 0.5 : 1,
+                }}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Error status */}
-        {!generating && status && !status.startsWith('Done') && status !== 'Capturing...' && (
-          <div className="status-bar" style={{ marginBottom: '1rem' }}>
-            <span className="status-dot" />
-            {status}
+        {!modelHasImg2Img && (
+          <div style={{
+            padding: '0.3rem 1rem',
+            fontSize: '0.65rem',
+            color: '#f59e0b',
+            fontFamily: 'var(--font-mono)',
+          }}>
+            {model} does not support img2img. Use Pro, Max, Flex, or 1.1 Ultra.
           </div>
         )}
 
-        {/* Gallery */}
-        <div>
-          <label className="control-label" style={{ marginBottom: '0.6rem' }}>Timeline</label>
-          {gallery.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              No generations yet. Hit "Generate Now" to capture the simulation.
-            </p>
-          ) : (
-            <div className="gallery-grid">
-              {gallery.map((entry, i) => (
-                <div
-                  key={i}
-                  className="gallery-item"
-                  onClick={() => setLightbox({ source: 'gallery', index: i })}
-                >
-                  <img src={entry.imageUrl} alt={`f${entry.simFrame}`} />
-                  <div className="gallery-label">
-                    f{entry.simFrame}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Prompt — full width */}
+        <div style={{ padding: '0.5rem 1rem 0.6rem', borderTop: '1px solid var(--border)' }}>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={2}
+            style={{ marginBottom: 0 }}
+          />
         </div>
       </div>
 
       {/* Lightbox */}
-      {lightbox && (() => {
-        const items = lightbox.source === 'capture' ? capturedFrames : gallery
-        const idx = lightbox.index
-        const item = items[idx]
-        if (!item) return null
-        const imgSrc = lightbox.source === 'capture'
-          ? (item as CapturedFrame).dataUrl
-          : (item as GalleryEntry).imageUrl
-        const label = lightbox.source === 'capture'
-          ? `f.${(item as CapturedFrame).frame}`
-          : `f${(item as GalleryEntry).simFrame}`
-        const canPrev = idx > 0
-        const canNext = idx < items.length - 1
+      {lightbox !== null && (() => {
+        const cf = capturedFrames[lightbox]
+        if (!cf) return null
+        const aiUrl = aiFrames[lightbox]
+        const hasCompare = !!aiUrl
+        const canPrev = lightbox > 0
+        const canNext = lightbox < capturedFrames.length - 1
+        const navBtn = (dir: 'prev' | 'next') => {
+          const enabled = dir === 'prev' ? canPrev : canNext
+          return (
+            <button
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff',
+                borderRadius: 6,
+                padding: '6px 14px',
+                cursor: enabled ? 'pointer' : 'default',
+                fontSize: '0.8rem',
+                opacity: enabled ? 1 : 0.3,
+              }}
+              disabled={!enabled}
+              onClick={() => setLightbox(dir === 'prev' ? lightbox - 1 : lightbox + 1)}
+            >
+              {dir === 'prev' ? '\u2190' : '\u2192'}
+            </button>
+          )
+        }
         return (
           <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
             <div
@@ -1151,55 +1996,227 @@ export default function EmergentWorlds() {
                 maxHeight: '90vh',
               }}
             >
-              <img src={imgSrc} alt={label} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 'var(--radius)' }} />
+              <div style={{
+                display: 'flex',
+                gap: '1.5rem',
+                alignItems: 'stretch',
+                justifyContent: 'center',
+                maxWidth: '100%',
+                maxHeight: '75vh',
+              }}>
+                {[
+                  { src: cf.dataUrl, key: 'sim' as const },
+                  ...(hasCompare ? [{ src: aiUrl, key: 'ai' as const }] : []),
+                ].map(({ src, key }) => (
+                  <div key={key} data-panel style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: '1 1 0',
+                    minWidth: 0,
+                    maxWidth: hasCompare ? '45vw' : '80vw',
+                  }}>
+                    <div style={{
+                      flex: 1,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 'var(--radius)',
+                      overflow: 'hidden',
+                      background: '#111',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <img
+                        src={src}
+                        alt={`${key} f.${cf.frame}`}
+                        onLoad={(e) => {
+                          const img = e.currentTarget
+                          const label = img.closest('[data-panel]')?.querySelector('[data-dims]')
+                          if (label) label.textContent = `${img.naturalWidth} × ${img.naturalHeight}`
+                        }}
+                        style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <span
+                      data-dims
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.6rem',
+                        color: 'var(--text-muted)',
+                        marginTop: '0.35rem',
+                        textAlign: key === 'sim' ? 'left' : 'right',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.75rem',
                 color: 'var(--text-muted)',
               }}>
-                {label}
+                f.{cf.frame}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button
-                  style={{
-                    background: 'rgba(255,255,255,0.1)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
-                    borderRadius: 6,
-                    padding: '6px 14px',
-                    cursor: canPrev ? 'pointer' : 'default',
-                    fontSize: '0.8rem',
-                    opacity: canPrev ? 1 : 0.3,
-                  }}
-                  disabled={!canPrev}
-                  onClick={() => setLightbox({ ...lightbox, index: idx - 1 })}
-                >
-                  &larr;
-                </button>
+                {navBtn('prev')}
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                  {idx + 1} / {items.length}
+                  {lightbox + 1} / {capturedFrames.length}
                 </span>
-                <button
-                  style={{
-                    background: 'rgba(255,255,255,0.1)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
-                    borderRadius: 6,
-                    padding: '6px 14px',
-                    cursor: canNext ? 'pointer' : 'default',
-                    fontSize: '0.8rem',
-                    opacity: canNext ? 1 : 0.3,
-                  }}
-                  disabled={!canNext}
-                  onClick={() => setLightbox({ ...lightbox, index: idx + 1 })}
-                >
-                  &rarr;
-                </button>
+                {navBtn('next')}
               </div>
             </div>
           </div>
         )
       })()}
+
+      {/* Discard Confirmation Modal */}
+      {discardConfirm && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-title"
+          aria-describedby="discard-desc"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(26,26,26,0.85)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1500,
+          }}
+          onClick={() => setDiscardConfirm(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setDiscardConfirm(null)
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+              const focusable = e.currentTarget.querySelectorAll<HTMLElement>('button')
+              if (focusable.length === 0) return
+              const first = focusable[0]
+              const last = focusable[focusable.length - 1]
+              const goBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)
+              const goFwd = e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)
+              if (goBack && document.activeElement === first) {
+                e.preventDefault(); last.focus()
+              } else if (goFwd && document.activeElement === last) {
+                e.preventDefault(); first.focus()
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault()
+                const idx = Array.from(focusable).indexOf(document.activeElement as HTMLElement)
+                const next = e.key === 'ArrowRight' ? idx + 1 : idx - 1
+                if (next >= 0 && next < focusable.length) focusable[next].focus()
+              }
+            }
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              padding: '1.5rem',
+              maxWidth: 360,
+              width: '90vw',
+              textAlign: 'center',
+            }}
+          >
+            <div id="discard-title" style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.85rem',
+              color: 'var(--text-primary)',
+              marginBottom: '0.75rem',
+            }}>
+              Discard current session?
+            </div>
+            <div id="discard-desc" style={{
+              fontSize: '0.75rem',
+              color: 'var(--text-muted)',
+              marginBottom: '1.25rem',
+            }}>
+              {capturedFrames.length} captures, {transformedCount} AI images will be lost.
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDiscardConfirm(null)}
+                ref={(el) => el?.focus()}
+                style={{ fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  discardConfirm.action()
+                  setDiscardConfirm(null)
+                }}
+                style={{ fontSize: '0.85rem' }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Shortcuts Overlay */}
+      {showShortcuts && createPortal(
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(10,10,10,0.85)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            gap: '0.6rem 1.5rem',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.85rem',
+          }}>
+            <div style={{
+              gridColumn: '1 / -1',
+              fontSize: '0.7rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: 'var(--text-muted)',
+              marginBottom: '0.5rem',
+            }}>
+              Keyboard Shortcuts
+            </div>
+            {SHORTCUTS.map(([key, desc]) => (
+              <div key={key} style={{ display: 'contents' }}>
+                <div style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  padding: '0.25rem 0.5rem',
+                  textAlign: 'center',
+                  color: 'var(--accent)',
+                  fontWeight: 600,
+                  minWidth: 36,
+                }}>
+                  {key}
+                </div>
+                <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                  {desc}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
-}
+})
+
+export default EmergentWorlds

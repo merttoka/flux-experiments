@@ -24,6 +24,7 @@ export interface GenerationParams {
   prompt: string
   model: string
   input_image?: string
+  input_image_2?: string
   image_prompt?: string
   width?: number
   height?: number

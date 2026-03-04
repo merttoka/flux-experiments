@@ -103,13 +103,29 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
       }}
     >
       {/* Image B (full, background) */}
+      {!cover && (
+        <img
+          src={imageB}
+          alt=""
+          draggable={false}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            filter: 'blur(40px) brightness(0.5)',
+            display: 'block',
+          }}
+        />
+      )}
       <img
         src={imageB}
         alt={labelB}
         draggable={false}
         style={cover
           ? { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }
-          : { width: '100%', display: 'block' }
+          : { width: '100%', display: 'block', position: 'relative' }
         }
       />
 
@@ -120,13 +136,30 @@ export default function CompareSlider({ imageA, imageB, labelA, labelB, style, c
         clipPath: `inset(0 ${100 - position}% 0 0)`,
         transition: animating ? 'clip-path 0.6s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
       }}>
+        {/* Blurred fill for size mismatch */}
+        {!cover && (
+          <img
+            src={imageA}
+            alt=""
+            draggable={false}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              filter: 'blur(40px) brightness(0.5)',
+              display: 'block',
+            }}
+          />
+        )}
         <img
           src={imageA}
           alt={labelA}
           draggable={false}
           style={cover
             ? { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }
-            : { width: '100%', display: 'block' }
+            : { width: '100%', display: 'block', position: 'relative' }
           }
         />
       </div>

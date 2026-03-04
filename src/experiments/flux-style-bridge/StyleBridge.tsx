@@ -556,6 +556,13 @@ export default function StyleBridge() {
     marginBottom: '0.5rem',
   }
 
+  const lightboxFrameStyle: React.CSSProperties = {
+    borderRadius: 'var(--radius)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    boxShadow: '0 0 0 1px rgba(255,255,255,0.04), 0 2px 16px rgba(0,0,0,0.4)',
+    overflow: 'hidden',
+  }
+
   const navBtnStyle = {
     background: 'rgba(255,255,255,0.1)',
     border: '1px solid rgba(255,255,255,0.2)',
@@ -1310,16 +1317,18 @@ export default function StyleBridge() {
                       <img
                         src={lightboxEntry.sourceImage}
                         alt="Original"
-                        style={{ maxWidth: '40%', maxHeight: '20vh', borderRadius: 'var(--radius)' }}
+                        style={{ maxWidth: '40%', maxHeight: '20vh', ...lightboxFrameStyle }}
                       />
                     </div>
                   )}
-                  <CompareSlider
-                    imageA={lightboxEntry.resultUrl}
-                    imageB={lightboxEntry.resultUrl2}
-                    labelA={lightboxEntry.settings.model}
-                    labelB={lightboxEntry.settings2?.model ?? 'B'}
-                  />
+                  <div style={lightboxFrameStyle}>
+                    <CompareSlider
+                      imageA={lightboxEntry.resultUrl}
+                      imageB={lightboxEntry.resultUrl2}
+                      labelA={lightboxEntry.settings.model}
+                      labelB={lightboxEntry.settings2?.model ?? 'B'}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div style={{
@@ -1333,7 +1342,7 @@ export default function StyleBridge() {
                       <img
                         src={lightboxEntry.sourceImage}
                         alt="Original"
-                        style={{ maxWidth: '100%', maxHeight: '65vh', borderRadius: 'var(--radius)' }}
+                        style={{ maxWidth: '100%', maxHeight: '65vh', ...lightboxFrameStyle }}
                       />
                     </div>
                   )}
@@ -1342,7 +1351,7 @@ export default function StyleBridge() {
                     <img
                       src={lightboxEntry.resultUrl}
                       alt="Generated"
-                      style={{ maxWidth: '100%', maxHeight: '65vh', borderRadius: 'var(--radius)' }}
+                      style={{ maxWidth: '100%', maxHeight: '65vh', ...lightboxFrameStyle }}
                     />
                   </div>
                 </div>

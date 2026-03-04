@@ -160,12 +160,12 @@ a:hover { color: #e0e0e0; }
 
 .sim-header {
   width: 100%;
-  padding: 1rem 1.5rem;
+  padding: 0.35rem 1rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 }
@@ -301,6 +301,10 @@ input[type="range"]::-moz-range-track {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeScaleIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 /* --- Image containers --- */
 .image-display {
@@ -431,6 +435,37 @@ input[type="range"]::-moz-range-track {
 .tip:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* --- Frame delete button --- */
+.frame-thumb .frame-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-muted);
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s, transform 0.12s;
+  z-index: 2;
+  line-height: 1;
+  padding: 0;
+}
+.frame-thumb:hover .frame-delete { opacity: 1; }
+.frame-thumb .frame-delete:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  transform: scale(1.15);
 }
 
 /* --- Utility labels --- */

@@ -4,6 +4,8 @@ import dofWGSL from './dof.wgsl?raw'
 
 export interface SimConfig {
   resolution?: number
+  width?: number
+  height?: number
   seedCount?: number
   speed?: number
 }
@@ -16,6 +18,8 @@ export interface SimHandle {
   setColorParams: (r: number, g: number, b: number, fadeRate: number) => void
   canvas: HTMLCanvasElement
   resolution: number
+  simWidth: number
+  simHeight: number
   agentCount: number
   seedCount: number
   speed: number
@@ -23,12 +27,14 @@ export interface SimHandle {
 
 export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): Promise<SimHandle> {
   const size = config.resolution ?? 640
+  const w = config.width ?? size
+  const h = config.height ?? size
   const seedCount = config.seedCount ?? 1
   const speed = config.speed ?? 1
 
   const baseArea = 1024 * 1024
-  const count = Math.floor(200000 * (size * size) / baseArea)
-  const S = { count, width: size, height: size, frame: 0 }
+  const count = Math.floor(200000 * (w * h) / baseArea)
+  const S = { count, width: w, height: h, frame: 0 }
 
   const wgpu = await setupWebGPU(canvas, S.width, S.height)
 
@@ -102,11 +108,12 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
   const copyBindGroup = wgpu.createBindGroup({ pipeline: copy, group: 0, bindings: [uniformBuffer, colorBuffer, outTexture.createView()] })
 
   // Seed positions — random locations with margin
-  const margin = size * 0.15
+  const marginX = w * 0.15
+  const marginY = h * 0.15
   const seedPositionsData = new Float32Array(Math.max(seedCount, 1) * 4) // vec4f per seed
   for (let i = 0; i < seedCount; i++) {
-    seedPositionsData[i * 4 + 0] = margin + Math.random() * (size - margin * 2)
-    seedPositionsData[i * 4 + 1] = margin + Math.random() * (size - margin * 2)
+    seedPositionsData[i * 4 + 0] = marginX + Math.random() * (w - marginX * 2)
+    seedPositionsData[i * 4 + 1] = marginY + Math.random() * (h - marginY * 2)
     seedPositionsData[i * 4 + 2] = 0 // padding
     seedPositionsData[i * 4 + 3] = 0
   }
@@ -193,6 +200,8 @@ export async function init(canvas: HTMLCanvasElement, config: SimConfig = {}): P
     },
     canvas,
     resolution: size,
+    simWidth: w,
+    simHeight: h,
     agentCount: count,
     seedCount,
     speed,

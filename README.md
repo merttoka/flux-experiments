@@ -15,7 +15,15 @@ Upload an image and transform it through curated style presets (bioluminescent, 
 - **Advanced settings** — union of both models' capabilities shown when comparing, with "[model] only" badges on exclusive settings. Closes on click outside.
 
 ### FLUX Reimagined Ecosystems (`/flux-reimagined-ecosystems`)
-A WebGPU DLA (Diffusion-Limited Aggregation) simulation runs in real-time. Capture screenshots and send them to FLUX for artistic reinterpretation. Stage detection uses pixel-delta analysis (smoothed mean RGB diff on 64x64 downsample) instead of frame counts — stages transition based on actual visual change rate. Collapsible visual controls panel exposes DOF (exponent/focus/radius/iterations), stopped particle color (HDR RGB + fade rate), and background color sliders that update the GPU in real-time. Auto-capture stops at Mature stage. Full advanced FLUX settings (size, generation, output params).
+A WebGPU DLA (Diffusion-Limited Aggregation) simulation runs in real-time. Capture sequences of frames and batch-transform them via FLUX img2img.
+
+- **Capture + AI strips** — vertically aligned strips at sim bottom (captures) and bottom panel top (AI results). Scroll-synced.
+- **Batch transform** — sequential img2img of all untransformed captures. Configurable downsample (256–1024px) to reduce cost. Per-frame cost estimation based on model pricing.
+- **Keyboard shortcuts** — Space (pause), C (capture), T (transform), R (reset), X (clear), E (export), \ (hold for shortcut overlay).
+- **IndexedDB persistence** — session auto-saves captures + AI results. Restores on refresh.
+- **Discard confirmation** — modal before destructive actions (reset/clear) when session has data.
+- **Export** — ZIP download of all captures + AI images + session metadata via JSZip.
+- **Visual controls** — collapsible DOF + color sliders updating GPU in real-time. Full advanced FLUX settings.
 
 ## Setup
 
