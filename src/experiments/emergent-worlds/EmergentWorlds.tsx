@@ -826,7 +826,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
   const loadExample = useCallback(async () => {
     setStatus('Loading example...')
     try {
-      const res = await fetch('/examples/emergent-worlds/example.zip')
+      const res = await fetch(`${import.meta.env.BASE_URL}examples/emergent-worlds/example.zip`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()
       await importFromZip(blob, 'Load')
@@ -1519,7 +1519,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                 {[0, 1, 2].map(i => (
                   <img
                     key={i}
-                    src={`/examples/emergent-worlds/preview-${i}.jpg`}
+                    src={`${import.meta.env.BASE_URL}examples/emergent-worlds/preview-${i}.jpg`}
                     alt={`Example preview ${i + 1}`}
                     style={{
                       width: 40,
