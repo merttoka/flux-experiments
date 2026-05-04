@@ -590,7 +590,6 @@ export default function StyleBridge() {
     flexWrap: 'wrap' as const,
     gap: '0.2rem 0.5rem',
     fontSize: '0.65rem',
-    fontFamily: 'var(--font-mono)',
     color: 'var(--text-muted)',
     opacity: 0.7,
   }
@@ -744,7 +743,6 @@ export default function StyleBridge() {
             onClick={() => setAdvancedOpen(!advancedOpen)}
           >
             <span style={{
-              fontFamily: 'var(--font-mono)',
               fontSize: '0.75rem',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
@@ -767,7 +765,6 @@ export default function StyleBridge() {
               marginLeft: '0.25rem',
               color: 'var(--text-muted)',
               fontSize: '0.75rem',
-              fontFamily: 'var(--font-mono)',
               border: '1px solid var(--border)',
               borderRadius: '50%',
               width: 18,
@@ -799,7 +796,6 @@ export default function StyleBridge() {
               zIndex: 9999,
               maxWidth: 'min(500px, calc(100vw - 2rem))',
               fontSize: '0.7rem',
-              fontFamily: 'var(--font-mono)',
               overflowX: 'auto' as const,
               boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
               pointerEvents: 'none',
@@ -1068,7 +1064,6 @@ export default function StyleBridge() {
             borderRadius: 'var(--radius-sm)',
             padding: '0.3rem 0.6rem',
             fontSize: '0.7rem',
-            fontFamily: 'var(--font-mono)',
             color: 'var(--on-overlay-fg)',
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
@@ -1185,7 +1180,6 @@ export default function StyleBridge() {
                           color: 'var(--text-muted)',
                           cursor: 'pointer',
                           fontSize: '0.65rem',
-                          fontFamily: 'var(--font-mono)',
                           opacity: 1,
                           padding: '2px 4px',
                           transition: 'opacity 0.15s, color 0.15s',
@@ -1253,7 +1247,6 @@ export default function StyleBridge() {
                   <div style={{
                     padding: '4px 6px',
                     fontSize: '0.55rem',
-                    fontFamily: 'var(--font-mono)',
                     color: 'var(--text-muted)',
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1269,7 +1262,6 @@ export default function StyleBridge() {
                           color: 'var(--text-muted)',
                           cursor: 'pointer',
                           fontSize: '0.55rem',
-                          fontFamily: 'var(--font-mono)',
                           opacity: 0.4,
                           padding: 0,
                           transition: 'opacity 0.15s, color 0.15s',
@@ -1380,7 +1372,6 @@ export default function StyleBridge() {
                 alignItems: 'center',
                 gap: '0.2rem 0.5rem',
                 fontSize: '0.7rem',
-                fontFamily: 'var(--font-mono)',
                 color: 'var(--text-muted)',
                 opacity: 0.7,
               }}>
@@ -1405,7 +1396,6 @@ export default function StyleBridge() {
                     color: 'var(--text-muted)',
                     cursor: 'pointer',
                     fontSize: '0.7rem',
-                    fontFamily: 'var(--font-mono)',
                     padding: '4px 12px',
                     borderRadius: 4,
                     transition: 'border-color 0.15s, color 0.15s',

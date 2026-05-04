@@ -987,7 +987,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
           gap: '0.6rem',
           marginBottom: '0.8rem',
           flexShrink: 0,
-          fontFamily: 'var(--font-mono)',
           fontSize: '0.75rem',
         }}>
           {/* Dims . Seeds . Reset */}
@@ -1123,7 +1122,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                 borderRadius: 8,
                 padding: '0.75rem',
                 fontSize: '0.7rem',
-                fontFamily: 'var(--font-mono)',
                 zIndex: 40,
                 width: 340,
                 boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
@@ -1200,7 +1198,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               color: 'var(--text-muted)',
               textAlign: 'center',
               padding: '2rem',
-              fontFamily: 'var(--font-mono)',
               fontSize: '0.85rem',
             }}>
               <p style={{ marginBottom: '0.5rem' }}>WebGPU not available</p>
@@ -1250,7 +1247,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
             alignItems: 'center',
             gap: '0.5rem',
             marginBottom: '0.4rem',
-            fontFamily: 'var(--font-mono)',
             fontSize: '0.7rem',
             color: 'var(--text-muted)',
             flexWrap: 'wrap',
@@ -1278,7 +1274,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                   padding: '2px 6px',
                   fontSize: '0.6rem',
                   cursor: 'pointer',
-                  fontFamily: 'var(--font-mono)',
                 }}
               >
                 Manual
@@ -1293,7 +1288,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                   padding: '2px 6px',
                   fontSize: '0.6rem',
                   cursor: 'pointer',
-                  fontFamily: 'var(--font-mono)',
                 }}
               >
                 Auto
@@ -1477,7 +1471,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: '0.55rem',
-                        fontFamily: 'var(--font-mono)',
                         color: 'var(--text-muted)',
                         opacity: 0.4,
                       }}>
@@ -1512,7 +1505,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               gap: '0.5rem',
               marginTop: '0.35rem',
               padding: '0.3rem 0',
-              fontFamily: 'var(--font-mono)',
               fontSize: '0.65rem',
               color: 'var(--text-secondary)',
             }}>
@@ -1563,7 +1555,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
           alignItems: 'center',
           gap: '0.6rem',
           padding: '0.5rem 1rem',
-          fontFamily: 'var(--font-mono)',
           fontSize: '0.7rem',
           flexWrap: 'wrap',
         }}>
@@ -1627,7 +1618,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
             style={{
               color: 'var(--text-muted)',
               fontSize: '0.55rem',
-              fontFamily: 'var(--font-mono)',
               border: '1px solid var(--border)',
               borderRadius: '50%',
               width: 14,
@@ -1655,7 +1645,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                   zIndex: 50,
                   maxWidth: 'min(500px, calc(100vw - 3rem))',
                   fontSize: '0.7rem',
-                  fontFamily: 'var(--font-mono)',
                   overflowX: 'auto' as const,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                   pointerEvents: 'none',
@@ -1948,7 +1937,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                 borderRadius: 'var(--radius-sm)',
                 padding: '0.3rem 0.6rem',
                 fontSize: '0.65rem',
-                fontFamily: 'var(--font-mono)',
                 color: 'var(--on-overlay-fg)',
                 whiteSpace: 'nowrap',
                 pointerEvents: 'none',
@@ -1979,7 +1967,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                   padding: '2px 6px',
                   fontSize: '0.55rem',
                   cursor: transforming ? 'default' : 'pointer',
-                  fontFamily: 'var(--font-mono)',
                   textTransform: 'capitalize',
                   opacity: transforming ? 0.5 : 1,
                 }}
@@ -1996,7 +1983,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
             padding: '0.3rem 1rem',
             fontSize: '0.65rem',
             color: '#f59e0b',
-            fontFamily: 'var(--font-mono)',
           }}>
             {model} does not support img2img. Use Pro, Max, Flex, or 1.1 Ultra.
           </div>
@@ -2181,7 +2167,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
             }}
           >
             <div id="discard-title" style={{
-              fontFamily: 'var(--font-mono)',
               fontSize: '0.85rem',
               color: 'var(--text-primary)',
               marginBottom: '0.75rem',
