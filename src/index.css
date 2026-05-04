@@ -1,6 +1,6 @@
 /* ============================================
    FLUX Demos — Global Styles
-   Dark workshop aesthetic (Manrope, #BF1656)
+   Tokens live in src/theme/tokens.css
    ============================================ */
 
 *, *::before, *::after {
@@ -10,29 +10,10 @@
 }
 
 :root {
-  --bg: #0a0a0a;
-  --bg-surface: #141414;
-  --bg-card: #1a1a1a;
-  --bg-card-hover: #1f1f1f;
-  --text-primary: #e0e0e0;
-  --text-secondary: #999;
-  --text-muted: #666;
-  --accent: #BF1656;
-  --accent-dark: #a01248;
-  --accent-glow: rgba(191, 22, 86, 0.25);
-  --accent-glow-strong: rgba(191, 22, 86, 0.45);
-  --border: #222;
-  --border-subtle: #1a1a1a;
-  --font-body: 'Manrope', sans-serif;
-  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
   --text-xs: 0.65rem;
   --text-sm: 0.75rem;
   --text-base-sm: 0.85rem;
-  --radius: 10px;
-  --radius-lg: 14px;
   --radius-sm: 4px;
-  --transition: 0.2s ease;
-  --transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 html {
@@ -54,7 +35,7 @@ a {
   text-decoration: none;
   transition: color var(--transition);
 }
-a:hover { color: #e0e0e0; }
+a:hover { color: var(--text-primary); }
 
 /* --- Page Layout --- */
 .lab-page {
@@ -73,20 +54,6 @@ a:hover { color: #e0e0e0; }
   margin-top: 0.5rem;
   font-weight: 400;
 }
-
-/* --- Breadcrumbs --- */
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 2rem;
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-}
-.breadcrumb a { color: var(--text-muted); }
-.breadcrumb a:hover { color: var(--accent); }
-.breadcrumb .separator { color: var(--text-muted); opacity: 0.5; user-select: none; }
-.breadcrumb .current { color: var(--text-primary); }
 
 /* --- Experiment Cards --- */
 .experiments-grid {
@@ -120,7 +87,7 @@ a:hover { color: #e0e0e0; }
   font-size: 0.95rem;
 }
 .experiment-card:hover a,
-.experiment-card:hover .card-title { color: #fff; }
+.experiment-card:hover .card-title { color: var(--text-primary); }
 
 .experiment-card .card-label {
   font-family: var(--font-mono);
@@ -159,22 +126,6 @@ a:hover { color: #e0e0e0; }
   display: flex;
   flex-direction: column;
 }
-
-.sim-header {
-  width: 100%;
-  padding: 0.35rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-.sim-header a { color: var(--text-muted); }
-.sim-header a:hover { color: var(--accent); }
-.sim-header .separator { color: var(--text-muted); opacity: 0.5; user-select: none; }
-.sim-header .sim-title { color: var(--text-primary); }
 
 /* --- Form Controls --- */
 .control-group { margin-bottom: 1rem; }
@@ -594,6 +545,6 @@ input[type="range"]::-moz-range-track {
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #444; }
-::selection { background: var(--accent); color: #fff; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+::selection { background: var(--selection-bg); color: var(--selection-fg); }

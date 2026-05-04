@@ -1,8 +1,8 @@
 import { useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
 import EmergentWorlds, { type EmergentWorldsHandle } from './EmergentWorlds'
 import ApiKeyButton from '../../lib/ApiKeyButton'
+import LabHeader from '../../components/LabHeader'
 
 const USAGE_TEXT = `🧫 WebGPU DLA sim → FLUX img2img pipeline
 
@@ -66,30 +66,32 @@ export default function EmergentWorldsPage() {
 
   return (
     <div className="sim-page">
-      <header className="sim-header">
-        <a href="https://lab.merttoka.com">Lab</a>
-        <span className="separator">/</span>
-        <Link to="/">FLUX Demos</Link>
-        <span className="separator">/</span>
-        <span className="sim-title">Reimagined Ecosystems</span>
-        <UsageTip />
-        <span style={{ flex: 1 }} />
-        <button
-          className="btn btn-secondary"
-          onClick={() => ewRef.current?.doImport()}
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
-        >
-          Import
-        </button>
-        <button
-          className="btn btn-secondary"
-          onClick={() => ewRef.current?.doExport()}
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
-        >
-          Export
-        </button>
-        <ApiKeyButton />
-      </header>
+      <LabHeader
+        breadcrumbs={[
+          { label: 'FLUX Demos', href: '/' },
+          { label: 'Reimagined Ecosystems' },
+        ]}
+        rightExtras={
+          <>
+            <UsageTip />
+            <button
+              className="btn btn-secondary"
+              onClick={() => ewRef.current?.doImport()}
+              style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
+            >
+              Import
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => ewRef.current?.doExport()}
+              style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
+            >
+              Export
+            </button>
+            <ApiKeyButton />
+          </>
+        }
+      />
       <EmergentWorlds ref={ewRef} />
     </div>
   )

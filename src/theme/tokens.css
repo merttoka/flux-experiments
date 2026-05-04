@@ -1,0 +1,74 @@
+/* ============================================
+   Theme tokens — light + dark palettes
+   ============================================ */
+
+:root, [data-theme="dark"] {
+  /* Surface */
+  --bg: #0a0a0a;
+  --bg-surface: #141414;
+  --bg-card: #1a1a1a;
+  --bg-card-hover: #1f1f1f;
+
+  /* Text */
+  --text-primary: #e0e0e0;
+  --text-secondary: #999;
+  --text-muted: #666;
+
+  /* Borders */
+  --border: #222;
+  --border-subtle: #1a1a1a;
+
+  /* Accent */
+  --accent: #BF1656;
+  --accent-dark: #a01248;
+  --accent-glow: rgba(191, 22, 86, 0.25);
+  --accent-glow-strong: rgba(191, 22, 86, 0.45);
+
+  /* Misc themed */
+  --scrollbar-thumb: #333;
+  --scrollbar-thumb-hover: #444;
+  --selection-bg: #BF1656;
+  --selection-fg: #fff;
+  --canvas-border-hover: #333;
+
+  /* Card-hover text (kept readable per theme) */
+  --text-on-accent: #fff;
+}
+
+[data-theme="light"] {
+  --bg: #fcfcfc;
+  --bg-surface: #f5f5f5;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f5f5f5;
+
+  --text-primary: #111;
+  --text-secondary: #444;
+  --text-muted: #666;
+
+  --border: #e0e0e0;
+  --border-subtle: #f5f5f5;
+
+  --accent: #BF1656;
+  --accent-dark: #a01248;
+  --accent-glow: rgba(191, 22, 86, 0.12);
+  --accent-glow-strong: rgba(191, 22, 86, 0.22);
+
+  --scrollbar-thumb: #ccc;
+  --scrollbar-thumb-hover: #999;
+  --selection-bg: #BF1656;
+  --selection-fg: #fff;
+  --canvas-border-hover: #999;
+
+  --text-on-accent: #fff;
+}
+
+/* Theme-independent tokens */
+:root {
+  --font-body: 'Manrope', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --transition: 0.2s ease;
+  --transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --header-height: 56px;
+}

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import LabHeader from '../components/LabHeader'
 
 const demos = [
   {
@@ -17,30 +18,28 @@ const demos = [
 
 export default function Home() {
   return (
-    <div className="lab-page">
-      <header className="lab-header">
-        <div className="breadcrumb">
-          <a href="https://lab.merttoka.com">Lab</a>
-          <span className="separator">/</span>
-          <span className="current">FLUX Demos</span>
-        </div>
-        <p className="lab-subtitle">
-          Experiments with Black Forest Labs image generation
-        </p>
-      </header>
+    <>
+      <LabHeader breadcrumbs={[{ label: 'FLUX Demos' }]} />
+      <div className="lab-page">
+        <header className="lab-header">
+          <p className="lab-subtitle">
+            Experiments with Black Forest Labs image generation
+          </p>
+        </header>
 
-      <div className="experiments-grid">
-        {demos.map((d) => (
-          <Link to={d.path} key={d.path} className="experiment-card" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <div className="card-label">
-              <span className="dot" />
-              {d.label}
-            </div>
-            <span className="card-title">{d.title}</span>
-            <p className="card-description">{d.description}</p>
-          </Link>
-        ))}
+        <div className="experiments-grid">
+          {demos.map((d) => (
+            <Link to={d.path} key={d.path} className="experiment-card" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div className="card-label">
+                <span className="dot" />
+                {d.label}
+              </div>
+              <span className="card-title">{d.title}</span>
+              <p className="card-description">{d.description}</p>
+            </Link>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

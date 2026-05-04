@@ -9,6 +9,20 @@
     <title>FLUX Demos</title>
   </head>
   <body>
+    <script>
+      (function() {
+        try {
+          var stored = localStorage.getItem('lab.theme');
+          var pref = stored || 'auto';
+          var resolved = pref === 'auto'
+            ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : pref;
+          document.documentElement.setAttribute('data-theme', resolved);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

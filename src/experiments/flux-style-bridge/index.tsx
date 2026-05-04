@@ -1,8 +1,8 @@
 import { useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
 import StyleBridge from './StyleBridge'
 import ApiKeyButton from '../../lib/ApiKeyButton'
+import LabHeader from '../../components/LabHeader'
 
 const USAGE_TEXT = `🎨 Style Presets — pick a preset to auto-fill the prompt. Edit freely.
 
@@ -56,15 +56,13 @@ function UsageTip() {
 export default function FluxStyleBridge() {
   return (
     <div className="sim-page">
-      <header className="sim-header">
-        <a href="https://lab.merttoka.com">Lab</a>
-        <span className="separator">/</span>
-        <Link to="/">FLUX Demos</Link>
-        <span className="separator">/</span>
-        <span className="sim-title">Style Bridge</span>
-        <UsageTip />
-        <ApiKeyButton />
-      </header>
+      <LabHeader
+        breadcrumbs={[
+          { label: 'FLUX Demos', href: '/' },
+          { label: 'Style Bridge' },
+        ]}
+        rightExtras={<><UsageTip /><ApiKeyButton /></>}
+      />
       <div style={{ flex: 1, width: '100%', paddingTop: '1.5rem' }}>
         <StyleBridge />
       </div>
