@@ -71,6 +71,8 @@ a:hover { color: var(--text-primary); }
   transition: transform var(--transition-spring), border-color var(--transition), box-shadow var(--transition), background var(--transition);
   cursor: pointer;
   position: relative;
+  text-decoration: none;
+  color: inherit;
 }
 .experiment-card:hover {
   transform: translateY(-3px);

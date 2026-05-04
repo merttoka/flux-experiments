@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 export type ThemePreference = 'light' | 'auto' | 'dark'
@@ -49,12 +49,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute('data-theme', resolved)
   }
 
-  // Persist preference
+  // Persist preference. localStorage may be unavailable (private mode, quota).
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, preference)
     } catch {
-      // ignore
+      // intentional: theme preference is non-critical, fall back to in-memory
     }
   }, [preference])
 
@@ -71,8 +71,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  const value = useMemo<ThemeContextValue>(
+    () => ({ preference, resolved, setPreference: setPreferenceState }),
+    [preference, resolved],
+  )
+
   return (
-    <ThemeContext.Provider value={{ preference, resolved, setPreference: setPreferenceState }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   )
