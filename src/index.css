@@ -330,7 +330,7 @@ input[type="range"]::-moz-range-track {
 .lightbox-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26,26,26,0.85);
+  background: var(--bg-overlay);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;

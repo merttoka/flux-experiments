@@ -33,6 +33,16 @@
 
   /* Card-hover text (kept readable per theme) */
   --text-on-accent: #fff;
+
+  /* Elevated overlay surfaces */
+  --bg-tooltip: #222;
+  --bg-panel: #1a1a1a;
+  --bg-panel-strong: #111;
+  --bg-overlay: rgba(10, 10, 10, 0.85);
+  --bg-overlay-soft: rgba(26, 26, 26, 0.85);
+  --bg-region: #050505;
+  --on-overlay-fg: #fff;
+  --on-overlay-border: rgba(255, 255, 255, 0.15);
 }
 
 [data-theme="light"] {
@@ -60,6 +70,16 @@
   --canvas-border-hover: #999;
 
   --text-on-accent: #fff;
+
+  /* Elevated overlay surfaces — light theme */
+  --bg-tooltip: #1a1a1a;
+  --bg-panel: #ffffff;
+  --bg-panel-strong: #f5f5f5;
+  --bg-overlay: rgba(20, 20, 20, 0.45);
+  --bg-overlay-soft: rgba(20, 20, 20, 0.30);
+  --bg-region: #f0f0f0;
+  --on-overlay-fg: #fff;
+  --on-overlay-border: rgba(255, 255, 255, 0.2);
 }
 
 /* Theme-independent tokens */
