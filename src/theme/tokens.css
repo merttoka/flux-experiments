@@ -23,6 +23,7 @@
   --accent-dark: #a01248;
   --accent-glow: rgba(191, 22, 86, 0.25);
   --accent-glow-strong: rgba(191, 22, 86, 0.45);
+  --card-shadow-hover: 0 0 20px var(--accent-glow), 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Misc themed */
   --scrollbar-thumb: #333;
@@ -60,8 +61,9 @@
 
   --accent: #BF1656;
   --accent-dark: #a01248;
-  --accent-glow: rgba(191, 22, 86, 0.12);
+  --accent-glow: rgba(191, 22, 86, 0.18);
   --accent-glow-strong: rgba(191, 22, 86, 0.22);
+  --card-shadow-hover: 0 0 0 1px var(--accent), 0 8px 24px rgba(191, 22, 86, 0.15);
 
   --scrollbar-thumb: #ccc;
   --scrollbar-thumb-hover: #999;

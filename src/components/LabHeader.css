@@ -8,7 +8,7 @@
   width: 100%;
   height: var(--header-height);
   background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border);
   padding: 0 1.5rem;
   gap: 1rem;
 }
@@ -93,5 +93,11 @@
 @media (max-width: 640px) {
   .lab-header-bar {
     padding: 0 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .lab-header-wordmark {
+    display: none;
   }
 }
