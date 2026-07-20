@@ -22,6 +22,10 @@ export default function Home() {
       <LabHeader breadcrumbs={[{ label: 'FLUX Demos' }]} />
       <div className="lab-page">
         <header className="lab-header">
+          <p className="lab-kicker">Generative image experiments</p>
+          <h1 className="lab-title">
+            FLUX <span className="accent">Demos</span>
+          </h1>
           <p className="lab-subtitle">
             Experiments with Black Forest Labs image generation
           </p>

@@ -51,6 +51,10 @@ Deployed on Vercel at `lab.merttoka.com`. Breadcrumb nav: Lab / FLUX Demos / [ex
 
 No server-side environment variables needed.
 
+## Design
+
+UI follows the lab.merttoka.com design language: shared theme tokens (`src/theme/tokens.css`), LabHeader with link back to the Lab, dark/light themes, Manrope body + mono labels, `#BF1656` accent, pill buttons, card hover lift + glow.
+
 ## Stack
 - Vite + React + TypeScript
 - WebGPU (DLA simulation)
