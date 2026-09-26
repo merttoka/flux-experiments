@@ -67,10 +67,7 @@ export default function EmergentWorldsPage() {
   return (
     <div className="sim-page">
       <LabHeader
-        breadcrumbs={[
-          { label: 'FLUX Demos', href: '/' },
-          { label: 'Reimagined Ecosystems' },
-        ]}
+        breadcrumbs={[{ label: 'Reimagined Ecosystems' }]}
         rightExtras={
           <>
             <UsageTip />

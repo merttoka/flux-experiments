@@ -57,10 +57,7 @@ export default function FluxStyleBridge() {
   return (
     <div className="sim-page">
       <LabHeader
-        breadcrumbs={[
-          { label: 'FLUX Demos', href: '/' },
-          { label: 'Style Bridge' },
-        ]}
+        breadcrumbs={[{ label: 'Style Bridge' }]}
         rightExtras={<><UsageTip /><ApiKeyButton /></>}
       />
       <div style={{ flex: 1, width: '100%', paddingTop: '1.5rem' }}>

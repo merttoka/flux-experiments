@@ -44,7 +44,7 @@ Users provide their own BFL API key via the in-app settings button. Keys are sto
 
 ## Deploy
 
-Deployed on Vercel at `lab.merttoka.com`. Breadcrumb nav: Lab / FLUX Demos / [experiment].
+Deployed on Vercel at `lab.merttoka.com`. Breadcrumb nav: Lab / [experiment]. The two demos are linked directly from the Lab home; `/bfl-api/` itself 308s to the Lab home there (the local `/` index page is for standalone dev only).
 
 - `base: '/bfl-api/'` is set in `vite.config.ts` when `VERCEL` env is present
 - `vercel.json` rewrites `/bfl-api/api/*` to serverless functions and `/bfl-api/*` to the SPA
