@@ -34,6 +34,7 @@ export interface GenerationParams {
   safety_tolerance?: number
   output_format?: 'jpeg' | 'png'
   prompt_upsampling?: boolean
+  disable_pup?: boolean
   aspect_ratio?: string
   raw?: boolean
   image_prompt_strength?: number
@@ -55,9 +56,11 @@ interface PollResponse {
 
 export const MODELS = [
   { label: 'FLUX.2 [pro]', value: 'flux-2-pro' },
+  { label: 'FLUX.2 [pro] preview', value: 'flux-2-pro-preview' },
   { label: 'FLUX.2 [max]', value: 'flux-2-max' },
   { label: 'FLUX.2 [flex]', value: 'flux-2-flex' },
   { label: 'FLUX.2 [klein] 9B', value: 'flux-2-klein-9b' },
+  { label: 'FLUX.2 [klein] 9B preview', value: 'flux-2-klein-9b-preview' },
   { label: 'FLUX.2 [klein] 4B', value: 'flux-2-klein-4b' },
   { label: 'FLUX.1.1 [pro]', value: 'flux-pro-1.1' },
   { label: 'FLUX.1.1 [pro] Ultra', value: 'flux-pro-1.1-ultra' },

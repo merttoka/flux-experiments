@@ -2,8 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 // Keep in sync with src/lib/bfl.ts MODELS array
 const ALLOWED_MODELS: ReadonlySet<string> = new Set([
-  'flux-2-pro', 'flux-2-max', 'flux-2-flex',
-  'flux-2-klein-9b', 'flux-2-klein-4b',
+  'flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex',
+  'flux-2-klein-9b', 'flux-2-klein-9b-preview', 'flux-2-klein-4b',
   'flux-pro-1.1', 'flux-pro-1.1-ultra',
 ])
 

@@ -61,4 +61,5 @@ Home cards carry thumbnails captured from the running demos (`public/previews/<s
 - Vite + React + TypeScript
 - WebGPU (DLA simulation)
 - Vercel serverless functions (BFL API proxy)
-- BFL FLUX.2 / FLUX.1.1 models
+- BFL models: FLUX.2 [pro] (+ preview), [max], [flex], [klein] 9B (+ preview), [klein] 4B; FLUX1.1 [pro], [pro] Ultra. Preview endpoints are where BFL lands quality/speed improvements first. Model list lives in `src/lib/bfl.ts` (mirrored by the `ALLOWED_MODELS` allowlist in `api/generate.ts`).
+- FLUX.2 [pro]/[max] upsample prompts by default; the "Prompt Upsampling" toggle maps to the API's `disable_pup` flag for them. Klein models accept `input_image` for img2img (Klein 9B up to 4 refs).

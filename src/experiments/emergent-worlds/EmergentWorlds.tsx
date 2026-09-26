@@ -93,18 +93,20 @@ function Tip({ text, align = 'center' }: { text: string; align?: 'center' | 'top
 
 // Model capability sets
 const MODELS_WITH_GUIDANCE = new Set(['flux-2-flex'])
-const MODELS_WITH_UPSAMPLING = new Set(['flux-2-flex', 'flux-pro-1.1', 'flux-pro-1.1-ultra'])
+const MODELS_WITH_UPSAMPLING = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex', 'flux-pro-1.1', 'flux-pro-1.1-ultra'])
+// FLUX.2 [pro]/[max] upsample by default; the API exposes the inverse flag (disable_pup) instead of prompt_upsampling
+const MODELS_WITH_DISABLE_PUP = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max'])
 const MODELS_WITH_ASPECT_RATIO = new Set(['flux-pro-1.1-ultra'])
-const MODELS_WITH_DIMENSIONS = new Set(['flux-2-pro', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-4b', 'flux-pro-1.1'])
+const MODELS_WITH_DIMENSIONS = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-9b-preview', 'flux-2-klein-4b', 'flux-pro-1.1'])
 const MODELS_WITH_RAW = new Set(['flux-pro-1.1-ultra'])
 const MODELS_WITH_IMG_STRENGTH = new Set(['flux-pro-1.1-ultra'])
-const MODELS_WITH_IMG2IMG = new Set(['flux-2-pro', 'flux-2-max', 'flux-2-flex', 'flux-pro-1.1-ultra'])
+const MODELS_WITH_IMG2IMG = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-9b-preview', 'flux-2-klein-4b', 'flux-pro-1.1-ultra'])
 
 const ASPECT_RATIOS = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21']
 
 const PARAM_MATRIX: { param: string; models: Record<string, boolean> }[] = [
   { param: 'txt2img', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
-  { param: 'img2img', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
+  { param: 'img2img', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': false, '1.1 Ultra': true } },
   { param: 'width/height', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': false } },
   { param: 'aspect_ratio', models: { 'Pro': false, 'Max': false, 'Flex': false, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
   { param: 'steps', models: { 'Pro': false, 'Max': false, 'Flex': true, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': false } },
@@ -112,19 +114,21 @@ const PARAM_MATRIX: { param: string; models: Record<string, boolean> }[] = [
   { param: 'seed', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
   { param: 'safety_tolerance', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
   { param: 'output_format', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
-  { param: 'prompt_upsampling', models: { 'Pro': false, 'Max': false, 'Flex': true, 'Klein': false, '1.1 Pro': true, '1.1 Ultra': true } },
+  { param: 'prompt_upsampling', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': false, '1.1 Pro': true, '1.1 Ultra': true } },
   { param: 'raw', models: { 'Pro': false, 'Max': false, 'Flex': false, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
   { param: 'img_prompt_strength', models: { 'Pro': false, 'Max': false, 'Flex': false, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
 ]
 const MODEL_COLUMNS = ['Pro', 'Max', 'Flex', 'Klein', '1.1 Pro', '1.1 Ultra']
 
 // Pricing
-const IMG2IMG_COST: Record<string, { perMP: number } | { perImage: number } | null> = {
+const IMG2IMG_COST: Record<string, { perMP: number } | { perImage: number } | { firstMP: number; extraMP: number } | null> = {
   'flux-2-pro': { perMP: 0.045 },
+  'flux-2-pro-preview': { perMP: 0.045 },
   'flux-2-max': { perMP: 0.07 },
   'flux-2-flex': { perMP: 0.10 },
-  'flux-2-klein-9b': null,
-  'flux-2-klein-4b': null,
+  'flux-2-klein-9b': { firstMP: 0.015, extraMP: 0.002 },
+  'flux-2-klein-9b-preview': { firstMP: 0.015, extraMP: 0.002 },
+  'flux-2-klein-4b': { firstMP: 0.014, extraMP: 0.001 },
   'flux-pro-1.1': null,
   'flux-pro-1.1-ultra': { perImage: 0.06 },
 }
@@ -138,6 +142,12 @@ function calcCost(model: string, dsW: number, dsH: number, frameCount: number): 
   if ('perImage' in pricing) {
     const cost = pricing.perImage * frameCount
     return { mp, cost, breakdown: `$${pricing.perImage}/img × ${frameCount}` }
+  }
+  if ('firstMP' in pricing) {
+    // Klein: flat first output MP, each extra MP and the input image billed per MP
+    const perFrame = pricing.firstMP + Math.max(0, mp - 1) * pricing.extraMP + mp * pricing.extraMP
+    const cost = perFrame * frameCount
+    return { mp, cost, breakdown: `($${pricing.firstMP} + $${pricing.extraMP}/MP) × ${frameCount}` }
   }
   const costPerFrame = pricing.perMP * mp
   const cost = costPerFrame * frameCount
@@ -398,7 +408,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
     const maxSafety = model === 'flux-pro-1.1' ? 6 : 5
     setSafetyTolerance(prev => Math.min(prev, maxSafety))
     if (MODELS_WITH_UPSAMPLING.has(model)) {
-      setPromptUpsampling(model === 'flux-2-flex')
+      setPromptUpsampling(model === 'flux-2-flex' || MODELS_WITH_DISABLE_PUP.has(model))
     }
     if (!MODELS_WITH_RAW.has(model)) setRaw(false)
     if (!MODELS_WITH_GUIDANCE.has(model)) {
@@ -574,7 +584,8 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
     }
     if (MODELS_WITH_GUIDANCE.has(model)) { params.steps = steps; params.guidance = guidance }
     params.seed = batchSeed
-    if (MODELS_WITH_UPSAMPLING.has(model)) params.prompt_upsampling = promptUpsampling
+    if (MODELS_WITH_DISABLE_PUP.has(model)) params.disable_pup = !promptUpsampling
+    else if (MODELS_WITH_UPSAMPLING.has(model)) params.prompt_upsampling = promptUpsampling
     params.output_format = outputFormat
     params.safety_tolerance = safetyTolerance
     if (MODELS_WITH_RAW.has(model)) params.raw = raw

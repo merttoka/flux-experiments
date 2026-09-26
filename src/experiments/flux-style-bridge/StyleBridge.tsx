@@ -46,19 +46,21 @@ function Tip({ text }: { text: string }) {
 
 // Model capability sets
 const MODELS_WITH_GUIDANCE = new Set(['flux-2-flex'])
-const MODELS_WITH_UPSAMPLING = new Set(['flux-2-flex', 'flux-pro-1.1', 'flux-pro-1.1-ultra'])
+const MODELS_WITH_UPSAMPLING = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex', 'flux-pro-1.1', 'flux-pro-1.1-ultra'])
+// FLUX.2 [pro]/[max] upsample by default; the API exposes the inverse flag (disable_pup) instead of prompt_upsampling
+const MODELS_WITH_DISABLE_PUP = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max'])
 const MODELS_WITH_ASPECT_RATIO = new Set(['flux-pro-1.1-ultra'])
-const MODELS_WITH_DIMENSIONS = new Set(['flux-2-pro', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-4b', 'flux-pro-1.1'])
+const MODELS_WITH_DIMENSIONS = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-9b-preview', 'flux-2-klein-4b', 'flux-pro-1.1'])
 const MODELS_WITH_RAW = new Set(['flux-pro-1.1-ultra'])
 const MODELS_WITH_IMG_STRENGTH = new Set(['flux-pro-1.1-ultra'])
-const MODELS_WITH_IMG2IMG = new Set(['flux-2-pro', 'flux-2-max', 'flux-2-flex', 'flux-pro-1.1-ultra'])
+const MODELS_WITH_IMG2IMG = new Set(['flux-2-pro', 'flux-2-pro-preview', 'flux-2-max', 'flux-2-flex', 'flux-2-klein-9b', 'flux-2-klein-9b-preview', 'flux-2-klein-4b', 'flux-pro-1.1-ultra'])
 
 const ASPECT_RATIOS = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21']
 
 // Param visibility matrix for help tooltip
 const PARAM_MATRIX: { param: string; models: Record<string, boolean> }[] = [
   { param: 'txt2img', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
-  { param: 'img2img', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
+  { param: 'img2img', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': false, '1.1 Ultra': true } },
   { param: 'width/height', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': false } },
   { param: 'aspect_ratio', models: { 'Pro': false, 'Max': false, 'Flex': false, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
   { param: 'steps', models: { 'Pro': false, 'Max': false, 'Flex': true, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': false } },
@@ -66,7 +68,7 @@ const PARAM_MATRIX: { param: string; models: Record<string, boolean> }[] = [
   { param: 'seed', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
   { param: 'safety_tolerance', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
   { param: 'output_format', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': true, '1.1 Pro': true, '1.1 Ultra': true } },
-  { param: 'prompt_upsampling', models: { 'Pro': false, 'Max': false, 'Flex': true, 'Klein': false, '1.1 Pro': true, '1.1 Ultra': true } },
+  { param: 'prompt_upsampling', models: { 'Pro': true, 'Max': true, 'Flex': true, 'Klein': false, '1.1 Pro': true, '1.1 Ultra': true } },
   { param: 'raw', models: { 'Pro': false, 'Max': false, 'Flex': false, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
   { param: 'img_prompt_strength', models: { 'Pro': false, 'Max': false, 'Flex': false, 'Klein': false, '1.1 Pro': false, '1.1 Ultra': true } },
 ]
@@ -152,12 +154,14 @@ const EXAMPLE_GALLERY: GalleryEntry[] = [
 function modelShortLabel(m: ModelValue): string {
   const full = MODELS.find(x => x.value === m)?.label ?? m
   const match = full.match(/\[([^\]]+)\]/)
-  return match ? `[${match[1]}]` : full
+  const preview = full.includes('preview') ? ' preview' : ''
+  return match ? `[${match[1]}]${preview}` : full
 }
 
 function capCheck(cap: Set<string>, m1: ModelValue, m2: ModelValue | null): { show: boolean; only: string | null } {
   const a = cap.has(m1)
-  const b = m2 ? cap.has(m2) : false
+  if (!m2) return { show: a, only: null }
+  const b = cap.has(m2)
   if (!a && !b) return { show: false, only: null }
   if (a && b) return { show: true, only: null }
   return { show: true, only: a ? modelShortLabel(m1) : modelShortLabel(m2!) }
@@ -224,7 +228,9 @@ function buildModelParams(
   if (resolvedSeed !== null) {
     params.seed = resolvedSeed
   }
-  if (MODELS_WITH_UPSAMPLING.has(targetModel)) {
+  if (MODELS_WITH_DISABLE_PUP.has(targetModel)) {
+    params.disable_pup = !opts.promptUpsampling
+  } else if (MODELS_WITH_UPSAMPLING.has(targetModel)) {
     params.prompt_upsampling = opts.promptUpsampling
   }
 
@@ -382,7 +388,7 @@ export default function StyleBridge() {
     const maxSafety = model === 'flux-pro-1.1' ? 6 : 5
     setSafetyTolerance(prev => Math.min(prev, maxSafety))
     if (MODELS_WITH_UPSAMPLING.has(model)) {
-      setPromptUpsampling(model === 'flux-2-flex')
+      setPromptUpsampling(model === 'flux-2-flex' || MODELS_WITH_DISABLE_PUP.has(model))
     }
     if (!MODELS_WITH_RAW.has(model)) setRaw(false)
     if (!MODELS_WITH_GUIDANCE.has(model)) {
