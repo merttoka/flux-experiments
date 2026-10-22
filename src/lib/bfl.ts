@@ -2,17 +2,35 @@ const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
 
 const KEY_STORAGE = 'bfl_api_key'
 
-export function getApiKey(): string {
-  return localStorage.getItem(KEY_STORAGE) || ''
+// The key stays in the tab (sessionStorage) unless the visitor ticks Remember, which keeps it on the device
+// (localStorage): lab.merttoka.com shares its storage with every page and script on the domain.
+const read = (store: () => Storage): string => {
+  try { return store().getItem(KEY_STORAGE) ?? '' } catch { return '' }
+}
+const write = (store: () => Storage, key: string | null) => {
+  try {
+    if (key === null) store().removeItem(KEY_STORAGE)
+    else store().setItem(KEY_STORAGE, key)
+  } catch { /* storage blocked */ }
 }
 
-export function setApiKey(key: string) {
-  localStorage.setItem(KEY_STORAGE, key)
+export function getApiKey(): string {
+  return read(() => sessionStorage) || read(() => localStorage)
+}
+
+export function isKeyRemembered(): boolean {
+  return read(() => localStorage).length > 0
+}
+
+export function setApiKey(key: string, remember: boolean) {
+  write(() => sessionStorage, key)
+  write(() => localStorage, remember ? key : null)
   window.dispatchEvent(new Event('bfl-key-change'))
 }
 
 export function clearApiKey() {
-  localStorage.removeItem(KEY_STORAGE)
+  write(() => sessionStorage, null)
+  write(() => localStorage, null)
   window.dispatchEvent(new Event('bfl-key-change'))
 }
 
@@ -99,7 +117,9 @@ async function submitGeneration(params: GenerationParams, signal?: AbortSignal):
   return res.json()
 }
 
-async function pollResult(pollingUrl: string, signal?: AbortSignal): Promise<PollResponse> {
+const MAX_POLL_RETRIES = 10
+
+async function pollResult(pollingUrl: string, signal?: AbortSignal, retryCount = 0): Promise<PollResponse> {
   const timeout = AbortSignal.timeout(15_000)
   const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
   let res: Response
@@ -118,10 +138,13 @@ async function pollResult(pollingUrl: string, signal?: AbortSignal): Promise<Pol
     throw new Error('Polling URL expired')
   }
   if (res.status === 429) {
+    if (retryCount >= MAX_POLL_RETRIES) {
+      throw new Error('Rate limited: too many retries')
+    }
     const body = await res.json().catch(() => ({})) as { retryAfter?: number }
     const wait = body.retryAfter ?? 5
     await sleep(wait * 1000)
-    return pollResult(pollingUrl, signal)
+    return pollResult(pollingUrl, signal, retryCount + 1)
   }
   let data: PollResponse
   try {
