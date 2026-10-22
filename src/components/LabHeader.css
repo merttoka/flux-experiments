@@ -1,23 +1,42 @@
+/* The Lab's header (lab.merttoka.com's public/lab-header.css, kept in step by hand): merttoka.com's floating glass bar,
+   logo, name and flask. The theme button's styles are in theme/ThemeToggle.css. */
+/* merttoka.com's floating bar (its css/style.css, "Navbar"), kept in the page's flow: sticky, a gap above it, 90% wide
+   up to 1000px, glass. Its footprint is --header-height (gap + bar), which the layouts below it read. */
 .lab-header-bar {
   position: sticky;
-  top: 0;
+  top: var(--header-gap, 12px);
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  height: var(--header-height);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  padding: 0 1.5rem;
+  width: 90%;
+  max-width: 1000px;
+  height: calc(var(--header-height, 68px) - var(--header-gap, 12px));
+  margin: var(--header-gap, 12px) auto 0;
+  padding: 0 24px;
   gap: 1rem;
+  background: color-mix(in srgb, var(--bg-card, #1a1a1a) 85%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--border, #222) 50%, transparent);
+  border-radius: 16px;
+  box-shadow: var(--header-shadow, 0 4px 30px rgba(0, 0, 0, 0.1));
+  /* Its own type, as a host page's may differ (the Lab's body: Manrope 16/1.6) */
+  color: var(--text-primary, #e0e0e0);
+  font: 400 16px/1.6 var(--font-body, 'Manrope', system-ui, sans-serif);
 }
+
 
 .lab-header-left {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  min-width: 0;
+  /* The bar's full height, so the flask's bubbles have room to rise before the overflow clips them. */
+  align-self: stretch;
+  /* merttoka.com's spacing: 12px between the logo and the name. */
+  gap: 12px;
+  /* Never narrower than what it shows: the crumbs (no width of their own) give way first; out of room, the bar drops
+     the logo, then the flask (below), and only then do a page's tools scroll. */
+  min-width: min-content;
   flex: 1;
   overflow: hidden;
 }
@@ -26,36 +45,138 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  flex-shrink: 0;
+  min-width: 0;
 }
+/* A page's own switches: a strip that scrolls sideways where the bar is too narrow for them, the theme button kept. */
+.lab-header-tools {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lab-header-tools > * { flex-shrink: 0; }
+.lab-header-tools::-webkit-scrollbar { display: none; }
+.lab-header-right > .theme-toggle { flex-shrink: 0; }
 
 .lab-header-bar .lab-header-brand,
 .lab-header-bar .lab-header-brand:hover {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
-  color: var(--text-primary);
+  gap: 12px;
+  color: var(--text-primary, #e0e0e0);
   text-decoration: none;
   flex-shrink: 0;
 }
 
+.lab-header-site { display: block; flex-shrink: 0; border-radius: 6px; }
+/* Out of room (the tools would scroll, or the page's name is squeezed): the logo goes first, then the flask, and on a
+   phone, where "Lab" is hidden, the Lab link with it. headerFit.ts sets the classes. */
+.lab-header-bar.is-tight-1 .lab-header-site { display: none; }
+.lab-header-bar.is-tight-2 .lab-flask { display: none; }
+@media (max-width: 480px) {
+  .lab-header-bar.is-tight-2 .lab-header-brand { display: none; }
+}
 .lab-header-logo {
-  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
   display: block;
 }
+/* merttoka.com's logo hover: a springy tilt. */
+@media (prefers-reduced-motion: no-preference) {
+  .lab-header-logo { transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease; }
+  .lab-header-site:hover .lab-header-logo,
+  .lab-header-site:focus-visible .lab-header-logo { transform: scale(1.1) rotate(5deg); filter: brightness(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab-header-site:hover .lab-header-logo { opacity: 0.8; }
+}
 
+/* The flask, as on merttoka.com: bubbles rise from its neck now and then, it boils on hover, and a click boils it
+   over (boilOver). */
+/* After the name as on merttoka.com: 12px on (the brand's gap), an 8px pad round a 15px glyph, in the secondary text
+   colour, nudged 1.5px down to sit on the name's baseline. */
+.lab-flask {
+  position: relative;
+  display: inline-flex;
+  padding: 8px;
+  margin-top: 1.5px;
+  color: var(--text-secondary, #999);
+  transition: color var(--transition, 0.2s ease);
+}
+.lab-flask svg { display: block; }
+.lab-header-brand:hover .lab-flask, .lab-header-brand:focus-visible .lab-flask { color: var(--link, #e5578b); }
+/* The flask's neck: the pad's top. */
+.lab-bubbles { position: absolute; left: 50%; top: 8px; pointer-events: none; }
+.lab-bubbles span {
+  position: absolute;
+  left: -1.5px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent, #bf1656);
+  opacity: 0;
+}
+.lab-bubbles span:nth-child(2) { left: 0.5px; width: 2px; height: 2px; }
+.lab-bubbles span:nth-child(3) { left: -3px; }
+.lab-burst-bubble {
+  position: fixed;
+  z-index: 100;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent, #bf1656);
+  pointer-events: none;
+}
+.lab-burst-bubble.is-filled { background: var(--accent, #bf1656); border: 0; opacity: 0.6; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Idle: each bubble rises in the first ~1 s of a 7 s cycle, staggered. */
+  .lab-bubbles span { animation: lab-bubble 7s ease-out infinite; }
+  .lab-bubbles span:nth-child(2) { animation-delay: 0.45s; }
+  .lab-bubbles span:nth-child(3) { animation-delay: 0.9s; }
+  .lab-header-brand:hover .lab-bubbles span,
+  .lab-header-brand:focus-visible .lab-bubbles span { animation: lab-boil 0.9s ease-out infinite; }
+  .lab-header-brand:hover .lab-bubbles span:nth-child(2),
+  .lab-header-brand:focus-visible .lab-bubbles span:nth-child(2) { animation-delay: 0.3s; }
+  .lab-header-brand:hover .lab-bubbles span:nth-child(3),
+  .lab-header-brand:focus-visible .lab-bubbles span:nth-child(3) { animation-delay: 0.6s; }
+  .lab-header-brand.is-boiling .lab-flask svg { animation: lab-wobble 0.35s ease-in-out; }
+}
+
+@keyframes lab-bubble {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  3% { opacity: 0.9; }
+  14% { transform: translate(1px, -10px) scale(1); opacity: 0; }
+  100% { transform: translate(1px, -10px) scale(1); opacity: 0; }
+}
+@keyframes lab-boil {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(1px, -12px) scale(1.2); opacity: 0; }
+}
+@keyframes lab-wobble {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-12deg); }
+  75% { transform: rotate(10deg); }
+}
+
+/* merttoka.com's name style */
 .lab-header-wordmark {
-  font-family: var(--font-body);
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-family: var(--font-body, 'Manrope', system-ui, sans-serif);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
 }
 
 .lab-header-crumbs {
   display: flex;
+  flex: 1 1 0;
+  width: 0;
   align-items: center;
   gap: 0.4rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.82rem;
   min-width: 0;
   overflow: hidden;
@@ -67,33 +188,46 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  /* Only the current page's name gives way, ending in an ellipsis; the links before it keep their width. */
+  flex-shrink: 0;
+  min-width: 0;
 }
+.lab-header-crumb:last-child { flex-shrink: 1; }
 
 .lab-header-crumb a {
-  color: var(--text-muted);
+  color: var(--text-muted, #666);
   text-decoration: none;
-  transition: color var(--transition);
+  transition: color var(--transition, 0.2s ease);
 }
 
 .lab-header-crumb a:hover {
-  color: var(--accent);
+  color: var(--accent, #bf1656);
 }
 
 .lab-header-crumb .is-current {
-  color: var(--text-primary);
+  color: var(--text-primary, #e0e0e0);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lab-header-sep {
-  color: var(--text-muted);
+  color: var(--text-muted, #666);
   opacity: 0.5;
   user-select: none;
 }
 
-@media (max-width: 640px) {
-  .lab-header-bar {
-    padding: 0 1rem;
-  }
+/* A phone: the bar nearly edge to edge (merttoka.com's 86% leaves the crumbs too little), tighter padding. */
+@media (max-width: 768px) {
+  .lab-header-bar { width: calc(100% - 2 * var(--header-gap, 10px)); }
+  .lab-header-bar { padding: 0 14px; }
+  .lab-header-right { gap: 0.3rem; }
+}
+
+/* Below 620 px the full trail squeezes the page's name to nothing: the page's name alone. The Lab link still goes back
+   to the demos' row on the Lab's home. */
+@media (max-width: 620px) {
+  .lab-header-crumb:not(:last-child) { display: none; }
 }
 
 @media (max-width: 480px) {

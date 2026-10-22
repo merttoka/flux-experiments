@@ -8,6 +8,7 @@
     { "source": "/bfl-api/examples/(.*)", "destination": "/examples/$1" },
     { "source": "/bfl-api/screenshots/(.*)", "destination": "/screenshots/$1" },
     { "source": "/bfl-api/previews/(.*)", "destination": "/previews/$1" },
+    { "source": "/bfl-api/logo.webp", "destination": "/logo.webp" },
     { "source": "/bfl-api/(.*)", "destination": "/" }
   ]
 }

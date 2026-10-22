@@ -24,6 +24,9 @@
   --accent-glow: rgba(191, 22, 86, 0.25);
   --accent-glow-strong: rgba(191, 22, 86, 0.45);
   --card-shadow-hover: 0 0 20px var(--accent-glow), 0 4px 16px rgba(0, 0, 0, 0.4);
+  /* merttoka.com's floating bar; accent text, AA on dark (the Lab's tokens) */
+  --header-shadow: 0 4px 30px rgba(0, 0, 0, 0.15);
+  --link: #e5578b;
 
   /* Misc themed */
   --scrollbar-thumb: #333;
@@ -64,6 +67,8 @@
   --accent-glow: rgba(191, 22, 86, 0.18);
   --accent-glow-strong: rgba(191, 22, 86, 0.22);
   --card-shadow-hover: 0 0 0 1px var(--accent), 0 8px 24px rgba(191, 22, 86, 0.15);
+  --header-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+  --link: var(--accent);
 
   --scrollbar-thumb: #ccc;
   --scrollbar-thumb-hover: #999;
@@ -92,5 +97,14 @@
   --radius-lg: 14px;
   --transition: 0.2s ease;
   --transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  --header-height: 56px;
+  /* The header's whole footprint: a gap above the floating bar, then the bar (components/LabHeader.css). */
+  --header-gap: 12px;
+  --header-height: 68px;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-gap: 10px;
+    --header-height: 62px;
+  }
 }

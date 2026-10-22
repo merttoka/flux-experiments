@@ -1,27 +1,30 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
-export type ThemePreference = 'light' | 'auto' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 
 interface ThemeContextValue {
-  preference: ThemePreference
+  /** The visitor's pick, or null while the theme follows the system (until the toggle is first clicked). */
+  preference: ResolvedTheme | null
   resolved: ResolvedTheme
-  setPreference: (p: ThemePreference) => void
+  /** The other theme from the one showing, remembered from then on. */
+  toggle: () => void
 }
 
+// Shared with the Lab (lab.merttoka.com, the same origin through its proxy) and the inline script in index.html. 'auto',
+// the old 3-state toggle's value, reads as no pick.
 const STORAGE_KEY = 'lab.theme'
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
-function readStoredPreference(): ThemePreference {
+function readStoredPreference(): ResolvedTheme | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'light' || raw === 'dark' || raw === 'auto') return raw
+    if (raw === 'light' || raw === 'dark') return raw
   } catch {
     // localStorage unavailable
   }
-  return 'auto'
+  return null
 }
 
 function systemPrefersDark(): boolean {
@@ -32,31 +35,17 @@ function systemPrefersDark(): boolean {
   }
 }
 
-function resolve(pref: ThemePreference, systemDark: boolean): ResolvedTheme {
-  if (pref === 'auto') return systemDark ? 'dark' : 'light'
-  return pref
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>(() => readStoredPreference())
+  const [preference, setPreference] = useState<ResolvedTheme | null>(() => readStoredPreference())
   const [systemDark, setSystemDark] = useState<boolean>(() => systemPrefersDark())
 
-  const resolved = resolve(preference, systemDark)
+  const resolved: ResolvedTheme = preference ?? (systemDark ? 'dark' : 'light')
 
   // Apply data-theme synchronously during render so descendant effects observe
   // the updated CSS variables on the same commit (e.g. canvas color reads).
   if (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') !== resolved) {
     document.documentElement.setAttribute('data-theme', resolved)
   }
-
-  // Persist preference. localStorage may be unavailable (private mode, quota).
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, preference)
-    } catch {
-      // intentional: theme preference is non-critical, fall back to in-memory
-    }
-  }, [preference])
 
   // Subscribe to system theme changes
   useEffect(() => {
@@ -71,10 +60,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  const value = useMemo<ThemeContextValue>(
-    () => ({ preference, resolved, setPreference: setPreferenceState }),
-    [preference, resolved],
-  )
+  const value = useMemo<ThemeContextValue>(() => ({
+    preference,
+    resolved,
+    toggle: () => {
+      const next = resolved === 'dark' ? 'light' : 'dark'
+      // Persisted only on a click, so a visitor who never clicks keeps following the system.
+      try {
+        localStorage.setItem(STORAGE_KEY, next)
+      } catch {
+        // intentional: theme preference is non-critical, fall back to in-memory
+      }
+      setPreference(next)
+    },
+  }), [preference, resolved])
 
   return (
     <ThemeContext.Provider value={value}>

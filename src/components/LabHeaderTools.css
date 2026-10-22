@@ -1,0 +1,84 @@
+/* Controls a page adds to the Lab's header (LabHeader's `tools`): lab.merttoka.com's public/lab-header-tools.css, kept in
+   step by hand. Every token has the Lab's value as a fallback.
+
+     <button className="lab-tool">Import</button>
+     <button className="lab-tool is-primary">Set API Key</button>
+     <div className="lab-tool-seg" role="group" aria-label="Units">
+       <button aria-pressed="true">mm</button><button aria-pressed="false">in</button>
+     </div>
+
+   With an icon, a label in .lab-tool-label goes on a phone (give the button an aria-label):
+
+     <button className="lab-tool" aria-label="Import"><svg …/><span className="lab-tool-label">Import</span></button>
+
+   All are 32 px tall, to sit on one line with the theme button. */
+
+/* Hosts without the app's reset (a page's own sheet may lack it) */
+.lab-tool, .lab-tool-seg, .lab-tool-seg > button { box-sizing: border-box; }
+
+.lab-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 32px;
+  padding: 0 0.7rem;
+  margin: 0;
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius, 10px);
+  background: transparent;
+  color: var(--text-secondary, #999);
+  font: 600 0.72rem/1 var(--font-body, 'Manrope', system-ui, sans-serif);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--transition, 0.2s ease), border-color var(--transition, 0.2s ease), background var(--transition, 0.2s ease);
+}
+.lab-tool:hover { color: var(--text-primary, #e0e0e0); border-color: var(--text-muted, #666); }
+.lab-tool svg { width: 14px; height: 14px; flex-shrink: 0; }
+/* An icon and a label: on a phone, the icon alone (the button's aria-label keeps its name). */
+@media (max-width: 640px) {
+  .lab-tool:has(> svg) { width: 32px; padding: 0; }
+  .lab-tool-label { display: none; }
+}
+.lab-tool:disabled { opacity: 0.45; cursor: default; }
+
+/* The one thing the page needs first (an API key it can't run without). */
+.lab-tool.is-primary { background: var(--accent, #bf1656); border-color: var(--accent, #bf1656); color: var(--text-on-accent, #fff); }
+.lab-tool.is-primary:hover { filter: brightness(1.1); color: var(--text-on-accent, #fff); }
+
+/* A segmented switch: its buttons' aria-pressed marks the one on. */
+.lab-tool-seg {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 2px;
+  gap: 0;
+  background: var(--bg-card, #1a1a1a);
+  border: 1px solid var(--border, #222);
+  border-radius: var(--radius, 10px);
+}
+.lab-tool-seg > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 100%;
+  padding: 0 0.4rem;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted, #666);
+  font: 600 0.72rem/1 var(--font-body, 'Manrope', system-ui, sans-serif);
+  cursor: pointer;
+  transition: color var(--transition, 0.2s ease), background var(--transition, 0.2s ease);
+}
+.lab-tool-seg > button:hover { color: var(--text-primary, #e0e0e0); }
+.lab-tool-seg > button[aria-pressed='true'] { background: var(--accent, #bf1656); color: var(--text-on-accent, #fff); }
+
+.lab-tool:focus-visible,
+.lab-tool-seg > button:focus-visible {
+  outline: 2px solid var(--accent, #bf1656);
+  outline-offset: 1px;
+}
