@@ -1,5 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+const isBflUrl = (url: URL) => url.protocol === 'https:' && url.hostname.endsWith('.bfl.ai')
+
+// fetch keeps a custom header such as x-key across a redirect to another host, so each hop is followed by hand and
+// only while it stays on BFL (image-proxy.ts does the same: each function deploys on its own).
+const MAX_HOPS = 3
+async function fetchOnBfl(url: string, init: RequestInit): Promise<Response | null> {
+  for (let hop = 0; hop <= MAX_HOPS; hop++) {
+    const response = await fetch(url, { ...init, redirect: 'manual' })
+    const location = response.headers.get('location')
+    if (response.status < 300 || response.status >= 400 || !location) return response
+    const next = new URL(location, url)
+    if (!isBflUrl(next)) return null
+    url = next.href
+  }
+  return null
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -10,8 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' })
 
   try {
-    const parsed = new URL(url)
-    if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.bfl.ai')) {
+    if (!isBflUrl(new URL(url))) {
       return res.status(400).json({ error: 'Invalid URL: must be https on a .bfl.ai domain' })
     }
   } catch {
@@ -19,10 +35,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchOnBfl(url, {
       headers: { 'x-key': apiKey },
       signal: AbortSignal.timeout(15_000),
     })
+    if (!response) return res.status(502).json({ error: 'Redirected away from BFL' })
 
     if (response.status === 429) {
       const retryAfter = Number(response.headers.get('retry-after') ?? '5') || 5
