@@ -612,9 +612,11 @@ input[type="range"]::-moz-range-track {
 ::selection { background: var(--selection-bg); color: var(--selection-fg); }
 
 /* Smooth theme transitions on commonly themed surfaces */
-body,
-.lab-header-bar,
-.experiment-card,
-.sim-page {
-  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+@media (prefers-reduced-motion: no-preference) {
+  body,
+  .lab-header-bar,
+  .experiment-card,
+  .sim-page {
+    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  }
 }

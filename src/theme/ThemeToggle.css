@@ -1,38 +1,20 @@
+/* merttoka.com's theme switch: one button, the icon of the theme showing. */
 .theme-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2px;
-  gap: 0;
-}
-
-.theme-toggle-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  background: transparent;
+  padding: 8px;
+  margin: 0;
+  background: none;
   border: none;
+  line-height: 1;
+  color: var(--text-primary, #e0e0e0);
   cursor: pointer;
-  color: var(--text-muted);
-  border-radius: 6px;
-  transition: color var(--transition), background var(--transition);
-  padding: 0;
+  transition: color var(--transition, 0.2s ease);
 }
-
-.theme-toggle-option:hover {
-  color: var(--text-primary);
-}
-
-.theme-toggle-option.is-active {
-  background: var(--accent);
-  color: var(--text-on-accent);
-}
-
-.theme-toggle-option:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.theme-toggle svg { display: block; }
+.theme-toggle:hover { color: var(--link, #e5578b); }
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent, #bf1656);
+  outline-offset: 2px;
+  border-radius: 4px;
 }

@@ -53,7 +53,7 @@ No server-side environment variables needed.
 
 ## Design
 
-UI follows the lab.merttoka.com design language: shared theme tokens (`src/theme/tokens.css`), LabHeader with link back to the Lab, dark/light themes, Manrope body + mono labels, `#BF1656` accent, pill buttons, card hover lift + glow.
+UI follows the lab.merttoka.com design language: shared theme tokens (`src/theme/tokens.css`), LabHeader as the Lab's (merttoka.com's floating glass bar: logo to merttoka.com, "Lab" and the bubbling flask back to the Lab, page tools in a strip that scrolls on a phone), dark/light themes (one sun/moon button; follows the OS until clicked, then `lab.theme` = `light`/`dark`, shared with the Lab), Manrope body + mono labels, `#BF1656` accent, pill buttons, card hover lift + glow.
 
 Home cards carry thumbnails captured from the running demos (`public/previews/<slug>/`): an 800px webp still (poster + reduced-motion fallback) and a ~5 s muted webm/mp4 loop — Style Bridge sweeps the A/B compare sliders, Reimagined Ecosystems shows DLA growth at 8×. Served under `/bfl-api/previews/` via a `vercel.json` rewrite.
 
