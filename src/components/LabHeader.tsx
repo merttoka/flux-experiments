@@ -1,8 +1,10 @@
+import { useLayoutEffect, useRef } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import ThemeToggle from '../theme/ThemeToggle'
 import './LabHeader.css'
 import './LabHeaderTools.css'
+import { watchFit } from './headerFit'
 
 export type Crumb = { label: string; href?: string }
 
@@ -62,8 +64,10 @@ function Flask() {
 
 /** The Lab's header (lab.merttoka.com's src/components/LabHeader.tsx, kept in step by hand). */
 export default function LabHeader({ breadcrumbs, tools }: Props) {
+  const bar = useRef<HTMLElement>(null)
+  useLayoutEffect(() => (bar.current ? watchFit(bar.current) : undefined), [])
   return (
-    <header className="lab-header-bar">
+    <header className="lab-header-bar" ref={bar}>
       <div className="lab-header-left">
         <a href="https://merttoka.com" className="lab-header-site" aria-label="merttoka.com">
           <img src={`${import.meta.env.BASE_URL}logo.webp`} alt="" className="lab-header-logo" width={32} height={32} />

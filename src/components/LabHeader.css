@@ -21,6 +21,9 @@
   border: 1px solid color-mix(in srgb, var(--border, #222) 50%, transparent);
   border-radius: 16px;
   box-shadow: var(--header-shadow, 0 4px 30px rgba(0, 0, 0, 0.1));
+  /* Its own type, as a host page's may differ (the Lab's body: Manrope 16/1.6) */
+  color: var(--text-primary, #e0e0e0);
+  font: 400 16px/1.6 var(--font-body, 'Manrope', system-ui, sans-serif);
 }
 
 
@@ -31,8 +34,8 @@
   align-self: stretch;
   /* merttoka.com's spacing: 12px between the logo and the name. */
   gap: 12px;
-  /* Never narrower than the logo and the Lab link: the crumbs (no width of their own) give way first, then a page's
-     tools. */
+  /* Never narrower than what it shows: the crumbs (no width of their own) give way first; out of room, the bar drops
+     the logo, then the flask (below), and only then do a page's tools scroll. */
   min-width: min-content;
   flex: 1;
   overflow: hidden;
@@ -68,6 +71,13 @@
 }
 
 .lab-header-site { display: block; flex-shrink: 0; border-radius: 6px; }
+/* Out of room (the tools would scroll, or the page's name is squeezed): the logo goes first, then the flask, and on a
+   phone, where "Lab" is hidden, the Lab link with it. headerFit.ts sets the classes. */
+.lab-header-bar.is-tight-1 .lab-header-site { display: none; }
+.lab-header-bar.is-tight-2 .lab-flask { display: none; }
+@media (max-width: 480px) {
+  .lab-header-bar.is-tight-2 .lab-header-brand { display: none; }
+}
 .lab-header-logo {
   width: 32px;
   height: 32px;
