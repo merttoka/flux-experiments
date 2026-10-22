@@ -68,21 +68,13 @@ export default function EmergentWorldsPage() {
     <div className="sim-page">
       <LabHeader
         breadcrumbs={[{ label: 'Reimagined Ecosystems' }]}
-        rightExtras={
+        tools={
           <>
             <UsageTip />
-            <button
-              className="btn btn-secondary"
-              onClick={() => ewRef.current?.doImport()}
-              style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
-            >
+            <button type="button" className="lab-tool" onClick={() => ewRef.current?.doImport()}>
               Import
             </button>
-            <button
-              className="btn btn-secondary"
-              onClick={() => ewRef.current?.doExport()}
-              style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
-            >
+            <button type="button" className="lab-tool" onClick={() => ewRef.current?.doExport()}>
               Export
             </button>
             <ApiKeyButton />

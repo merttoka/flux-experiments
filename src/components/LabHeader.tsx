@@ -2,12 +2,15 @@ import type { MouseEvent, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import ThemeToggle from '../theme/ThemeToggle'
 import './LabHeader.css'
+import './LabHeaderTools.css'
 
 export type Crumb = { label: string; href?: string }
 
 interface Props {
   breadcrumbs?: Crumb[]
-  rightExtras?: ReactNode
+  /** A page's own controls, before the theme button, in a strip that scrolls sideways when the bar is tight.
+   * LabHeaderTools.css has their shared looks: .lab-tool, .lab-tool.is-primary and the segmented .lab-tool-seg. */
+  tools?: ReactNode
 }
 
 // The Lab's home, at the row these demos sit in.
@@ -58,7 +61,7 @@ function Flask() {
 }
 
 /** The Lab's header (lab.merttoka.com's src/components/LabHeader.tsx, kept in step by hand). */
-export default function LabHeader({ breadcrumbs, rightExtras }: Props) {
+export default function LabHeader({ breadcrumbs, tools }: Props) {
   return (
     <header className="lab-header-bar">
       <div className="lab-header-left">
@@ -88,7 +91,7 @@ export default function LabHeader({ breadcrumbs, rightExtras }: Props) {
         )}
       </div>
       <div className="lab-header-right">
-        {rightExtras && <div className="lab-header-tools">{rightExtras}</div>}
+        {tools && <div className="lab-header-tools">{tools}</div>}
         <ThemeToggle />
       </div>
     </header>
