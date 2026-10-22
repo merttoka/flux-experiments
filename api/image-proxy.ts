@@ -22,6 +22,20 @@ const isResultUrl = (raw: string): boolean => {
   }
 }
 
+// Each redirect is followed only while it stays on BFL's hosts, a few hops at most; null when one leaves or loops
+// (result.ts does the same: each function deploys on its own).
+const MAX_HOPS = 3
+async function fetchResult(url: string, signal: AbortSignal): Promise<Response | null> {
+  for (let hop = 0; hop <= MAX_HOPS; hop++) {
+    const response = await fetch(url, { redirect: 'manual', signal })
+    const location = response.headers.get('location')
+    if (response.status < 300 || response.status >= 400 || !location) return response
+    url = new URL(location, url).href
+    if (!isResultUrl(url)) return null
+  }
+  return null
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -31,7 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) })
+    const response = await fetchResult(imageUrl, AbortSignal.timeout(30_000))
+    if (!response) return res.status(502).json({ error: 'Redirected away from BFL' })
     if (!response.ok) return res.status(response.status).end()
 
     if (Number(response.headers.get('content-length') ?? 0) > MAX_BYTES) return res.status(413).json({ error: 'Image too large' })
