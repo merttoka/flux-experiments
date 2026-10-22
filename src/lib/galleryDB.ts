@@ -1,3 +1,5 @@
+import { fetchResultImage } from './bfl'
+
 const DB_NAME = 'flux-style-bridge'
 const STORE_NAME = 'gallery'
 const DB_VERSION = 1
@@ -110,9 +112,7 @@ export async function estimateStorageBytes(): Promise<number> {
 }
 
 export async function urlToDataUrl(url: string): Promise<string> {
-  // Proxy through our API to avoid CORS issues with S3 presigned URLs
-  const apiBase = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
-  const res = await fetch(`${apiBase}/image-proxy?url=${encodeURIComponent(url)}`)
+  const res = await fetchResultImage(url)
   if (!res.ok) throw new Error(`Image proxy failed: ${res.status}`)
   const blob = await res.blob()
   return new Promise((resolve, reject) => {

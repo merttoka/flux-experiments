@@ -24,8 +24,12 @@ Two FLUX demos (Style Bridge, Reimagined Ecosystems) served as a subpage of lab.
   img2img; Import/Export of a session in the header.
 - `src/lib/` — `bfl.ts` (models, the `/api` client, polling), `galleryDB.ts` (IndexedDB results), `ApiKeyButton` /
   `ApiKeyModal` (the key: `sessionStorage`, or `localStorage` when remembered; `bfl-key-change` event).
-- `api/` — `generate.ts` (allowlisted models), `result.ts` (polling, redirects only within BFL), `image-proxy.ts`
-  (FLUX results only, image types by their bytes).
+- `api/` — `generate.ts` (allowlisted models), `result.ts` (polling, redirects only within BFL, default port only),
+  `image-proxy.ts` (FLUX results only: `https://delivery*.bfl.ai`, default port, image types by their bytes; wants the
+  `x-bfl-key` header like the others, so no other site can embed it: a custom header needs a CORS preflight these
+  functions never grant). 500s say "Upstream request failed" and log the detail. Client side, `fetchResultImage()` in
+  `src/lib/bfl.ts` is the one way to call the proxy. A rate limit on `/api/*` lives in the Vercel dashboard (Firewall),
+  not in code.
 
 ## Header and theme (kept in step with the Lab by hand)
 

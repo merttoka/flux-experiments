@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { generateImage, hasApiKey, canvasToBase64, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
+import { generateImage, fetchResultImage, hasApiKey, canvasToBase64, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
 import { init, type SimHandle, type SimConfig } from '../../sim/dla-advanced/simulation'
 import { DEFAULT_PROMPT, buildStructureSuffix, STRUCTURE_SUFFIX_TIP } from './prompts'
 import { presets as stylePresets } from '../flux-style-bridge/presets'
@@ -596,8 +596,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
   // Fetch AI image and convert to data URL
   const fetchAsDataUrl = useCallback(async (imageUrl: string): Promise<string> => {
     try {
-      const proxyUrl = `${import.meta.env.BASE_URL}api/image-proxy?url=${encodeURIComponent(imageUrl)}`
-      const res = await fetch(proxyUrl)
+      const res = await fetchResultImage(imageUrl)
       const blob = await res.blob()
       return await new Promise<string>((resolve) => {
         const reader = new FileReader()
@@ -699,7 +698,7 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
           const res = await fetch(url)
           return res.blob()
         }
-        const res = await fetch(`${import.meta.env.BASE_URL}api/image-proxy?url=${encodeURIComponent(url)}`)
+        const res = await fetchResultImage(url)
         return res.blob()
       }
       // Captures

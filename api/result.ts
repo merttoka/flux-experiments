@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-const isBflUrl = (url: URL) => url.protocol === 'https:' && url.hostname.endsWith('.bfl.ai')
+const isBflUrl = (url: URL) => url.protocol === 'https:' && url.port === '' && url.hostname.endsWith('.bfl.ai')
 
 // fetch keeps a custom header such as x-key across a redirect to another host, so each hop is followed by hand and
 // only while it stays on BFL (image-proxy.ts does the same: each function deploys on its own).
@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (err instanceof Error && err.name === 'TimeoutError') {
       return res.status(504).json({ error: 'Upstream timeout' })
     }
-    const message = err instanceof Error ? err.message : String(err)
-    return res.status(500).json({ error: message })
+    console.error('[result]', err instanceof Error ? err.message : String(err))
+    return res.status(500).json({ error: 'Upstream request failed' })
   }
 }
