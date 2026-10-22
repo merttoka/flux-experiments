@@ -40,7 +40,7 @@ npm run dev
 
 ## API Key
 
-Users provide their own BFL API key via the in-app settings button. Keys are stored in `localStorage` and passed through the serverless proxy — never stored server-side. Get a key at [api.bfl.ai](https://api.bfl.ai).
+Users provide their own BFL API key via the in-app settings button. Keys are stored in `localStorage` and passed through the serverless proxy — never stored server-side. The image proxy (`api/image-proxy`, for results BFL serves without CORS) fetches only FLUX results (https, `*.bfl.ai`) and passes them on only as PNG, JPEG or WebP, going by their bytes, with `nosniff` and a sandbox CSP: it answers on lab.merttoka.com, where the key is stored. Get a key at [api.bfl.ai](https://api.bfl.ai).
 
 ## Deploy
 

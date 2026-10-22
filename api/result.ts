@@ -11,8 +11,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const parsed = new URL(url)
-    if (!parsed.hostname.endsWith('.bfl.ai')) {
-      return res.status(400).json({ error: 'Invalid URL: must be a .bfl.ai domain' })
+    if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.bfl.ai')) {
+      return res.status(400).json({ error: 'Invalid URL: must be https on a .bfl.ai domain' })
     }
   } catch {
     return res.status(400).json({ error: 'Invalid URL' })
