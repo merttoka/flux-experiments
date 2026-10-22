@@ -92,6 +92,11 @@ function authHeaders(): Record<string, string> {
   return { 'x-bfl-key': key }
 }
 
+/** A FLUX result through api/image-proxy (BFL's delivery hosts send no CORS headers), which wants the key too. */
+export function fetchResultImage(url: string): Promise<Response> {
+  return fetch(`${API_BASE}/image-proxy?url=${encodeURIComponent(url)}`, { headers: authHeaders() })
+}
+
 async function submitGeneration(params: GenerationParams, signal?: AbortSignal): Promise<SubmitResponse> {
   const { model, ...rest } = params
   const timeout = AbortSignal.timeout(30_000)

@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (err instanceof Error && err.name === 'TimeoutError') {
       return res.status(504).json({ error: 'Upstream timeout' })
     }
-    const message = err instanceof Error ? err.message : String(err)
-    return res.status(500).json({ error: message })
+    console.error('[generate]', err instanceof Error ? err.message : String(err))
+    return res.status(500).json({ error: 'Upstream request failed' })
   }
 }

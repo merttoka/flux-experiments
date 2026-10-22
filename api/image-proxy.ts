@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-// FLUX results only. BFL serves them from delivery.*.bfl.ai without CORS (docs.bfl.ai), hence this proxy. It answers
+// FLUX results only. BFL serves them from delivery*.bfl.ai without CORS (docs.bfl.ai), hence this proxy. It answers
 // on lab.merttoka.com too, where visitors keep their BFL key, so it fetches nothing else and passes on nothing but an
 // image the browser can't run as a page.
 const MAX_BYTES = 20 * 1024 * 1024
@@ -16,7 +16,7 @@ const imageType = (b: Buffer): string | null => {
 const isResultUrl = (raw: string): boolean => {
   try {
     const url = new URL(raw)
-    return url.protocol === 'https:' && url.hostname.endsWith('.bfl.ai')
+    return url.protocol === 'https:' && url.port === '' && url.hostname.startsWith('delivery') && url.hostname.endsWith('.bfl.ai')
   } catch {
     return false
   }
@@ -39,9 +39,13 @@ async function fetchResult(url: string, signal: AbortSignal): Promise<Response |
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
+  // The key isn't checked here (BFL does that on generate/result), but asking for it keeps other sites from
+  // embedding the proxy: a custom header needs a CORS preflight this API never grants.
+  if (!req.headers['x-bfl-key']) return res.status(401).json({ error: 'API key required' })
+
   const imageUrl = req.query.url
   if (typeof imageUrl !== 'string' || !isResultUrl(imageUrl)) {
-    return res.status(400).json({ error: 'url must be a FLUX result (https, *.bfl.ai)' })
+    return res.status(400).json({ error: 'url must be a FLUX result (https, delivery*.bfl.ai)' })
   }
 
   try {
