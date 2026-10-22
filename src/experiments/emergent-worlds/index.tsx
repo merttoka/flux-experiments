@@ -61,6 +61,11 @@ function UsageTip() {
   )
 }
 
+// The header's Import and Export: an arrow into a tray and one out of it (on a phone, the icon alone).
+const ICON = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const
+const IMPORT_ICON = <svg {...ICON}><path d="M12 3v12M7 10l5 5 5-5M4 20h16" /></svg>
+const EXPORT_ICON = <svg {...ICON}><path d="M12 15V3M7 8l5-5 5 5M4 20h16" /></svg>
+
 export default function EmergentWorldsPage() {
   const ewRef = useRef<EmergentWorldsHandle>(null)
 
@@ -71,11 +76,11 @@ export default function EmergentWorldsPage() {
         tools={
           <>
             <UsageTip />
-            <button type="button" className="lab-tool" onClick={() => ewRef.current?.doImport()}>
-              Import
+            <button type="button" className="lab-tool" aria-label="Import" title="Import" onClick={() => ewRef.current?.doImport()}>
+              {IMPORT_ICON}<span className="lab-tool-label">Import</span>
             </button>
-            <button type="button" className="lab-tool" onClick={() => ewRef.current?.doExport()}>
-              Export
+            <button type="button" className="lab-tool" aria-label="Export" title="Export" onClick={() => ewRef.current?.doExport()}>
+              {EXPORT_ICON}<span className="lab-tool-label">Export</span>
             </button>
             <ApiKeyButton />
           </>

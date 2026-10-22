@@ -7,6 +7,10 @@
        <button aria-pressed="true">mm</button><button aria-pressed="false">in</button>
      </div>
 
+   With an icon, a label in .lab-tool-label goes on a phone (give the button an aria-label):
+
+     <button className="lab-tool" aria-label="Import"><svg …/><span className="lab-tool-label">Import</span></button>
+
    All are 32 px tall, to sit on one line with the theme button. */
 
 /* Hosts without the app's reset (a page's own sheet may lack it) */
@@ -31,6 +35,12 @@
   transition: color var(--transition, 0.2s ease), border-color var(--transition, 0.2s ease), background var(--transition, 0.2s ease);
 }
 .lab-tool:hover { color: var(--text-primary, #e0e0e0); border-color: var(--text-muted, #666); }
+.lab-tool svg { width: 14px; height: 14px; flex-shrink: 0; }
+/* An icon and a label: on a phone, the icon alone (the button's aria-label keeps its name). */
+@media (max-width: 640px) {
+  .lab-tool:has(> svg) { width: 32px; padding: 0; }
+  .lab-tool-label { display: none; }
+}
 .lab-tool:disabled { opacity: 0.45; cursor: default; }
 
 /* The one thing the page needs first (an API key it can't run without). */
