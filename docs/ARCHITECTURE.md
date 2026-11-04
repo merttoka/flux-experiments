@@ -22,7 +22,7 @@ Two FLUX demos (Style Bridge, Reimagined Ecosystems) served as a subpage of lab.
 - `src/experiments/flux-style-bridge/` — Style Bridge: presets, Style DNA mixer, A/B compare slider.
 - `src/experiments/emergent-worlds/` — Reimagined Ecosystems: the DLA sim (`src/sim/`, WebGPU) captured into FLUX
   img2img; Import/Export of a session in the header.
-- `src/lib/` — `bfl.ts` (models, the `/api` client, polling), `galleryDB.ts` (IndexedDB results), `ApiKeyButton` /
+- `src/lib/` — `bfl.ts` (models, the `/api` client, polling), `galleryDB.ts` (IndexedDB results), `pageMeta.ts` (a demo's tab title and description), `ApiKeyButton` /
   `ApiKeyModal` (the key: `sessionStorage`, or `localStorage` when remembered; `bfl-key-change` event).
 - `api/` — `generate.ts` (allowlisted models), `result.ts` (polling, redirects only within BFL, default port only),
   `image-proxy.ts` (FLUX results only: `https://delivery*.bfl.ai`, default port, image types by their bytes; wants the

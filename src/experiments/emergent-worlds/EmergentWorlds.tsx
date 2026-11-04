@@ -8,6 +8,13 @@ import JSZip from 'jszip'
 
 const STORAGE_KEY = 'ew-settings'
 
+/** The example session's thumbnails, public/examples/emergent-worlds/preview-<i>.jpg. */
+const EXAMPLE_PREVIEWS = [
+  'Example result: small glowing teal and violet clusters on black',
+  'Example result: violet and teal coral with jellyfish under rippling light',
+  'Example result: a tall teal and violet reef with jellyfish, lit from above',
+]
+
 interface PersistedSettings {
   model: ModelValue
   seedCount: number
@@ -1519,11 +1526,11 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               color: 'var(--text-secondary)',
             }}>
               <div style={{ display: 'flex', gap: '0.25rem' }}>
-                {[0, 1, 2].map(i => (
+                {EXAMPLE_PREVIEWS.map((alt, i) => (
                   <img
                     key={i}
                     src={`${import.meta.env.BASE_URL}examples/emergent-worlds/preview-${i}.jpg`}
-                    alt={`Example preview ${i + 1}`}
+                    alt={alt}
                     style={{
                       width: 40,
                       height: 40,

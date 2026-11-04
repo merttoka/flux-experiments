@@ -1,6 +1,6 @@
 # FLUX Demos
 
-Two interactive demos for BFL's FLUX image generation models. Vite+React+TS, deployed to Vercel.
+Two interactive demos for BFL's FLUX image generation models. Vite+React+TS, deployed to Vercel. Each sets its own tab title and description (`src/lib/pageMeta.ts`).
 
 ## Demos
 

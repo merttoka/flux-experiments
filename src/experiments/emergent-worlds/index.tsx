@@ -2,6 +2,7 @@ import { useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import EmergentWorlds, { type EmergentWorldsHandle } from './EmergentWorlds'
 import ApiKeyButton from '../../lib/ApiKeyButton'
+import { usePageMeta } from '../../lib/pageMeta'
 import LabHeader from '../../components/LabHeader'
 
 const USAGE_TEXT = `🧫 WebGPU DLA sim → FLUX img2img pipeline
@@ -68,6 +69,7 @@ const EXPORT_ICON = <svg {...ICON}><path d="M12 15V3M7 8l5-5 5 5M4 20h16" /></sv
 
 export default function EmergentWorldsPage() {
   const ewRef = useRef<EmergentWorldsHandle>(null)
+  usePageMeta('FLUX Reimagined Ecosystems · Lab', 'Grow a DLA simulation on the GPU, then let FLUX reinterpret its structures as ecosystems.')
 
   return (
     <div className="sim-page">
