@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import StyleBridge from './StyleBridge'
 import ApiKeyButton from '../../lib/ApiKeyButton'
+import { usePageMeta } from '../../lib/pageMeta'
 import LabHeader from '../../components/LabHeader'
 
 const USAGE_TEXT = `🎨 Style Presets — pick a preset to auto-fill the prompt. Edit freely.
@@ -54,6 +55,8 @@ function UsageTip() {
 }
 
 export default function FluxStyleBridge() {
+  usePageMeta('FLUX Style Bridge · Lab', 'Transform an image through curated style presets, or A/B two FLUX models on one seed.')
+
   return (
     <div className="sim-page">
       <LabHeader
