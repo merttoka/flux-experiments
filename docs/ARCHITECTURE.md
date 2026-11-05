@@ -46,10 +46,9 @@ Two FLUX demos (Style Bridge, Reimagined Ecosystems) served as a subpage of lab.
 - `src/theme/` — `tokens.css` (the Lab's palette, drifted: no Toolpath palette), `ThemeProvider.tsx` (follows the OS
   until the button is first clicked, then `lab.theme` = `light`/`dark`; anything else stored follows the OS),
   `ThemeToggle.tsx` (merttoka.com's sun/moon). `index.html`'s inline script applies the theme before the first paint.
+- `src/components/Slider.tsx`, `Slider.css` and `sliderMath.ts` are a hand-kept copy of portfolio-web-labs' `src/components/Slider.*`, documented in that repo's ARCHITECTURE; the source commit is in each file's header, and the copy differs only by its header comments and two `eslint-disable` lines. A hidden native range input keeps keyboard and screen-reader support, and takes its name from a `<label htmlFor>`: a wrapping label would name the first stepper. `flux-style-bridge/CompareSlider.tsx` is an image wipe, not one of these.
 
 ## Checks
 
 `npx tsc -b`, `npm run build`, `npm run lint` (5 known errors: `CompareSlider` refs during render, `ApiKeyButton`'s
 effect, an unused import in `EmergentWorlds`, `ThemeProvider` exporting a hook).
-
-Sliders: `src/components/Slider.tsx`, `Slider.css` and `sliderMath.ts` are a hand-kept copy of portfolio-web-labs' `src/components/Slider.*`, documented in that repo's ARCHITECTURE; the source commit is in each file's header, and the copy differs only by its header comments and two `eslint-disable` lines. A hidden native range input keeps keyboard and screen-reader support, and takes its name from a `<label htmlFor>`: a wrapping label would name the first stepper. `flux-style-bridge/CompareSlider.tsx` is an image wipe, not one of these.
