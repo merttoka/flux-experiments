@@ -5,6 +5,7 @@ import { init, type SimHandle, type SimConfig } from '../../sim/dla-advanced/sim
 import { DEFAULT_PROMPT, buildStructureSuffix, STRUCTURE_SUFFIX_TIP } from './prompts'
 import { presets as stylePresets } from '../flux-style-bridge/presets'
 import JSZip from 'jszip'
+import Slider from '../../components/Slider'
 
 const STORAGE_KEY = 'ew-settings'
 
@@ -1126,13 +1127,12 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               }}>&#9662;</span>
             </button>
             {visualOpen && (
-              <div style={{
+              <div className="ew-visual-panel" style={{
                 position: 'absolute',
                 top: '100%',
                 right: 0,
                 marginTop: 6,
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
                 gap: '0.75rem',
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border)',
@@ -1154,12 +1154,12 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                   ] as const).map(s => (
                     <div key={s.label}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                        <span>{s.label}</span>
+                        <label htmlFor={`ew-dof-${s.label}`}>{s.label}</label>
                         <span>{s.step < 1 ? s.value.toFixed(2) : s.value}</span>
                       </div>
-                      <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
-                        onChange={e => {
-                          const v = Number(e.target.value)
+                      <Slider id={`ew-dof-${s.label}`} min={s.min} max={s.max} step={s.step} value={s.value} label={`depth of field ${s.label}`}
+                        valueText={s.step < 1 ? s.value.toFixed(2) : String(s.value)}
+                        onChange={v => {
                           s.set(v)
                           if (simRef.current) simRef.current.setDofParams(
                             s.label === 'Exp' ? v : dofExponent,
@@ -1168,7 +1168,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                             s.label === 'Iter' ? v : dofIterations,
                           )
                         }}
-                        style={{ width: '100%' }}
                       />
                     </div>
                   ))}
@@ -1184,12 +1183,12 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                   ] as const).map(s => (
                     <div key={s.label}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                        <span>{s.label}</span>
+                        <label htmlFor={`ew-color-${s.label}`}>{s.label}</label>
                         <span>{s.value.toFixed(2)}</span>
                       </div>
-                      <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
-                        onChange={e => {
-                          const v = Number(e.target.value)
+                      <Slider id={`ew-color-${s.label}`} min={s.min} max={s.max} step={s.step} value={s.value} label={`colour ${s.label}`}
+                        valueText={s.value.toFixed(2)}
+                        onChange={v => {
                           s.set(v)
                           if (simRef.current) simRef.current.setColorParams(
                             s.label === 'R' ? v : stoppedR,
@@ -1198,7 +1197,6 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                             s.label === 'Fade' ? v : fadeRate,
                           )
                         }}
-                        style={{ width: '100%' }}
                       />
                     </div>
                   ))}
@@ -1700,9 +1698,10 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
               <div ref={advancedRef} style={{
                 position: 'fixed',
                 top: Math.max(8, advancedPos.y - 8),
-                left: advancedPos.x + 12,
+                // Beside the toggle, kept on screen: on a phone the toggle is further right than the panel is wide.
+                left: Math.max(8, Math.min(advancedPos.x + 12, window.innerWidth - 300 - 8)),
                 transform: 'translateY(-100%)',
-                width: 300,
+                width: 'min(300px, calc(100vw - 16px))',
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border)',
                 borderRadius: 8,
@@ -1752,17 +1751,17 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                       <>
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                            <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="Denoising iterations. More steps = higher quality but slower." />Steps</span>
+                            <label htmlFor="ew-steps" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="Denoising iterations. More steps = higher quality but slower." />Steps</label>
                             <span style={sliderValueStyle}>{steps}</span>
                           </div>
-                          <input type="range" min={1} max={50} value={steps} onChange={(e) => setSteps(Number(e.target.value))} style={{ width: '100%' }} />
+                          <Slider id="ew-steps" min={1} max={50} step={1} value={steps} label="steps" valueText={String(steps)} onChange={setSteps} />
                         </div>
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                            <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="Prompt adherence strength. Higher = more literal. Range 1.5-10." />Guidance</span>
+                            <label htmlFor="ew-guidance" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="Prompt adherence strength. Higher = more literal. Range 1.5-10." />Guidance</label>
                             <span style={sliderValueStyle}>{guidance}</span>
                           </div>
-                          <input type="range" min={1.5} max={10} step={0.5} value={guidance} onChange={(e) => setGuidance(Number(e.target.value))} style={{ width: '100%' }} />
+                          <Slider id="ew-guidance" min={1.5} max={10} step={0.5} value={guidance} label="guidance" valueText={String(guidance)} onChange={setGuidance} />
                         </div>
                       </>
                     )}
@@ -1828,10 +1827,10 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                     </div>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                        <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="Content filter strictness. 0 = most strict, higher = more permissive." />Safety Tolerance</span>
+                        <label htmlFor="ew-safety" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="Content filter strictness. 0 = most strict, higher = more permissive." />Safety Tolerance</label>
                         <span style={sliderValueStyle}>{safetyTolerance}</span>
                       </div>
-                      <input type="range" min={0} max={model === 'flux-pro-1.1' ? 6 : 5} value={safetyTolerance} onChange={(e) => setSafetyTolerance(Number(e.target.value))} style={{ width: '100%' }} />
+                      <Slider id="ew-safety" min={0} max={model === 'flux-pro-1.1' ? 6 : 5} step={1} value={safetyTolerance} label="safety tolerance" valueText={String(safetyTolerance)} onChange={setSafetyTolerance} />
                     </div>
                     {MODELS_WITH_RAW.has(model) && (
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
@@ -1843,10 +1842,10 @@ const EmergentWorlds = forwardRef<EmergentWorldsHandle>(function EmergentWorlds(
                     {MODELS_WITH_IMG_STRENGTH.has(model) && (
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                          <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="How much the source image influences output. 0 = minimal, 1 = maximum." />Image Prompt Strength</span>
+                          <label htmlFor="ew-image-strength" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}><Tip text="How much the source image influences output. 0 = minimal, 1 = maximum." />Image Prompt Strength</label>
                           <span style={sliderValueStyle}>{imagePromptStrength.toFixed(2)}</span>
                         </div>
-                        <input type="range" min={0} max={1} step={0.05} value={imagePromptStrength} onChange={(e) => setImagePromptStrength(Number(e.target.value))} style={{ width: '100%' }} />
+                        <Slider id="ew-image-strength" min={0} max={1} step={0.05} value={imagePromptStrength} label="image prompt strength" valueText={imagePromptStrength.toFixed(2)} onChange={setImagePromptStrength} />
                       </div>
                     )}
                   </div>
