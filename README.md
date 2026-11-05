@@ -57,6 +57,8 @@ UI follows the lab.merttoka.com design language: shared theme tokens (`src/theme
 
 Home cards carry thumbnails captured from the running demos (`public/previews/<slug>/`): an 800px webp still (poster + reduced-motion fallback) and a ~5 s muted webm/mp4 loop — Style Bridge sweeps the A/B compare sliders, Reimagined Ecosystems shows DLA growth at 8×. Served under `/bfl-api/previews/` via a `vercel.json` rewrite.
 
+**Sliders** are the Lab's one slider, a copy kept in step by hand (`src/components/Slider.tsx`, from portfolio-web-labs): with a mouse a drag follows the pointer's travel and Shift moves it a tenth as far; scrolling sideways over the track moves the value (Alt lets a vertical wheel do it) while a vertical scroll stays the page's; on touch a sideways drag locks the slider, a vertical swipe scrolls the page, and − / + steppers nudge one step. The value always lands on its step grid; a coarse grid marks its stops. The compare slider is an image wipe, not one of these.
+
 ## Stack
 - Vite + React + TypeScript
 - WebGPU (DLA simulation)

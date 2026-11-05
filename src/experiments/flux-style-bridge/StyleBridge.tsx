@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { generateImage, hasApiKey, MODELS, isFlux2Model, type ModelValue, type GenerationParams } from '../../lib/bfl'
 import { presets, blendPrompts } from './presets'
 import CompareSlider from './CompareSlider'
+import Slider from '../../components/Slider'
 import { loadGallery, saveEntry, deleteEntry, estimateStorageBytes, urlToDataUrl, type StoredGalleryEntry } from '../../lib/galleryDB'
 
 function Tip({ text }: { text: string }) {
@@ -648,17 +649,10 @@ export default function StyleBridge() {
         {mixerEnabled && (
           <div style={{ marginBottom: '0.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-              <span style={sliderLabelStyle}>Blend</span>
+              <label htmlFor="sb-blend" style={sliderLabelStyle}>Blend</label>
               <span style={sliderValueStyle}>{blendWeight}% A / {100 - blendWeight}% B</span>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={blendWeight}
-              onChange={(e) => setBlendWeight(Number(e.target.value))}
-              style={{ width: '100%' }}
-            />
+            <Slider id="sb-blend" min={0} max={100} step={1} value={blendWeight} label="blend" valueText={`${blendWeight}% A, ${100 - blendWeight}% B`} onChange={setBlendWeight} />
           </div>
         )}
 
@@ -929,17 +923,17 @@ export default function StyleBridge() {
                   <>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                        <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Steps<Tip text="Denoising iterations. More steps = higher quality but slower. Default 50." /><OnlyBadge only={capGuidance.only} /></span>
+                        <label htmlFor="sb-steps" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Steps<Tip text="Denoising iterations. More steps = higher quality but slower. Default 50." /><OnlyBadge only={capGuidance.only} /></label>
                         <span style={sliderValueStyle}>{steps}</span>
                       </div>
-                      <input type="range" min={1} max={50} value={steps} onChange={(e) => setSteps(Number(e.target.value))} style={{ width: '100%' }} />
+                      <Slider id="sb-steps" min={1} max={50} step={1} value={steps} label="steps" valueText={String(steps)} onChange={setSteps} />
                     </div>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                        <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Guidance<Tip text="Prompt adherence strength. Higher values follow the prompt more literally. Range 1.5–10." /><OnlyBadge only={capGuidance.only} /></span>
+                        <label htmlFor="sb-guidance" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Guidance<Tip text="Prompt adherence strength. Higher values follow the prompt more literally. Range 1.5–10." /><OnlyBadge only={capGuidance.only} /></label>
                         <span style={sliderValueStyle}>{guidance}</span>
                       </div>
-                      <input type="range" min={1.5} max={10} step={0.5} value={guidance} onChange={(e) => setGuidance(Number(e.target.value))} style={{ width: '100%' }} />
+                      <Slider id="sb-guidance" min={1.5} max={10} step={0.5} value={guidance} label="guidance" valueText={String(guidance)} onChange={setGuidance} />
                     </div>
                   </>
                 )}
@@ -999,21 +993,14 @@ export default function StyleBridge() {
 
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Safety Tolerance<Tip text="Content filter strictness. 0 = most strict, higher = more permissive. Max 6 for 1.1 Pro." /></span>
+                    <label htmlFor="sb-safety" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Safety Tolerance<Tip text="Content filter strictness. 0 = most strict, higher = more permissive. Max 6 for 1.1 Pro." /></label>
                     <span style={sliderValueStyle}>
                       {safetyTolerance === 0 && <span style={{ marginRight: 4 }}>Strict</span>}
                       {safetyTolerance === (model === 'flux-pro-1.1' ? 6 : 5) && <span style={{ marginRight: 4 }}>Loose</span>}
                       {safetyTolerance}
                     </span>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={model === 'flux-pro-1.1' ? 6 : 5}
-                    value={safetyTolerance}
-                    onChange={(e) => setSafetyTolerance(Number(e.target.value))}
-                    style={{ width: '100%' }}
-                  />
+                  <Slider id="sb-safety" min={0} max={model === 'flux-pro-1.1' ? 6 : 5} step={1} value={safetyTolerance} label="safety tolerance" valueText={String(safetyTolerance)} onChange={setSafetyTolerance} />
                 </div>
 
                 {capRaw.show && (
@@ -1033,18 +1020,10 @@ export default function StyleBridge() {
                 {capImgStrength.show && sourceBase64 && (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                      <span style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Image Prompt Strength<Tip text="How much the source image influences output. 0 = minimal influence, 1 = maximum adherence." /><OnlyBadge only={capImgStrength.only} /></span>
+                      <label htmlFor="sb-image-strength" style={{ ...sliderLabelStyle, display: 'flex', alignItems: 'center' }}>Image Prompt Strength<Tip text="How much the source image influences output. 0 = minimal influence, 1 = maximum adherence." /><OnlyBadge only={capImgStrength.only} /></label>
                       <span style={sliderValueStyle}>{imagePromptStrength.toFixed(2)}</span>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={imagePromptStrength}
-                      onChange={(e) => setImagePromptStrength(Number(e.target.value))}
-                      style={{ width: '100%' }}
-                    />
+                    <Slider id="sb-image-strength" min={0} max={1} step={0.05} value={imagePromptStrength} label="image prompt strength" valueText={imagePromptStrength.toFixed(2)} onChange={setImagePromptStrength} />
                   </div>
                 )}
               </div>
